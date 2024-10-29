@@ -1697,17 +1697,17 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 				Write-Host "Old: $($oldapp.LocalizedDisplayName) New: $($newapp.LocalizedDisplayName)"
 
 				# Check that the DeploymentTypes and Deployment Type Names Match if not, skip supersedence
-				$NewAppDeploymentTypes = Get-CMDeploymentType -ApplicationName $NewApp.LocalizedDisplayName | Sort-Object LocalizedDisplayName
-				$OldAppDeploymentTypes = Get-CMDeploymentType -ApplicationName $OldApp.LocalizedDisplayName | Sort-Object LocalizedDisplayName
+				$NewAppDeploymentTypes = Get-CMDeploymentType -InputObject $NewApp | Sort-Object LocalizedDisplayName
+				$OldAppDeploymentTypes = Get-CMDeploymentType -InputObject $OldApp | Sort-Object LocalizedDisplayName
 
 				Foreach ($DeploymentType in $NewAppDeploymentTypes) {
 					Write-Host "Superseding $($DeploymentType.LocalizedDisplayName)"
 					$SupersededDeploymentType = $OldAppDeploymentTypes | Where-Object LocalizedDisplayName -eq $DeploymentType.LocalizedDisplayName
 					if ($UninstallOldApp) {
-						Add-CMDeploymentTypeSupersedence -SupersedingDeploymentType $DeploymentType -SupersededDeploymentType $SupersededDeploymentType -IsUninstall $true | Out-Null
+						Add-CMDeploymentTypeSupersedence -InputObject $DeploymentType -SupersededDeploymentType $SupersededDeploymentType -IsUninstall $true | Out-Null
 					}
 					else {
-						Add-CMDeploymentTypeSupersedence -SupersedingDeploymentType $DeploymentType -SupersededDeploymentType $SupersededDeploymentType | Out-Null
+						Add-CMDeploymentTypeSupersedence -InputObject $DeploymentType -SupersededDeploymentType $SupersededDeploymentType | Out-Null
 					}
 				}
 			}
