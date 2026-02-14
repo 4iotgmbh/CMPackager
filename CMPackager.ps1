@@ -1645,6 +1645,25 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 				}
 
 				Foreach ($DeploymentCollection in $DeploymentCollections) {
+					## Check if the deployment collection exists in the ConfigMgr site, create it if missing
+					$ExistingCollection = Get-CMDeviceCollection -Name $DeploymentCollection -ErrorAction SilentlyContinue
+					If (-not $ExistingCollection) {
+						$WarningMessage = "Collection '$DeploymentCollection' does not exist in site '$($Global:SiteCode)'. Creating collection."
+						Write-Warning $WarningMessage
+						Add-LogContent "WARNING: $WarningMessage"
+						Try {
+							New-CMDeviceCollection -Name $DeploymentCollection -LimitingCollectionName "All Systems" -ErrorAction Stop | Out-Null
+							Add-LogContent "Successfully created collection '$DeploymentCollection' with limiting collection 'All Systems'"
+						}
+						Catch {
+							$ErrorMessage = $_.Exception.Message
+							Add-LogContent "ERROR: Failed to create collection '$DeploymentCollection'"
+							Add-LogContent "ERROR: $ErrorMessage"
+							$Success = $false
+							Continue
+						}
+					}
+
 					Try {
 						Add-LogContent "Deploying $ApplicationName $ApplicationSWVersion to $DeploymentCollection"
 						If ($DeploymentSplat.UpdateSupersedence) { Add-LogContent "UpdateSuperseded enabled, new package will automatically upgrade previous version" }
