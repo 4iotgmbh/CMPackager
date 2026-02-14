@@ -72,6 +72,22 @@
 		<Uninstall>False</Uninstall>
 	</Supersedence>
 	<Deployment>
-		<DeploySoftware>False</DeploySoftware>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>Promethean ActivInspire-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Promethean ActivInspire-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Promethean ActivInspire-General Availability</DeploymentCollection>
 	</Deployment>
 </ApplicationDef>

@@ -50,5 +50,21 @@ if ($webSoftwareHome.Content -match "var\s+devices\s*=\s*(\[.+\])") {
 	</Distribution>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>Watchguard Single Sign-On Client-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Watchguard Single Sign-On Client-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Watchguard Single Sign-On Client-General Availability</DeploymentCollection>
 	</Deployment>
 </ApplicationDef>

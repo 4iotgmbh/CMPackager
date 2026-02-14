@@ -63,7 +63,22 @@
 			<Uninstall>False</Uninstall>
 		</Supersedence>
 		<Deployment>
-			<DeploySoftware>False</DeploySoftware>
-			<DeploymentCollection></DeploymentCollection>
-		</Deployment>
-	</ApplicationDef>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>Scratch-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Scratch-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Scratch-General Availability</DeploymentCollection>
+	</Deployment>
+</ApplicationDef>

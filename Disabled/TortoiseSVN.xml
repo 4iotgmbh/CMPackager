@@ -63,7 +63,21 @@
 	</Supersedence>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
-		<DeploymentCollection>Test Collection</DeploymentCollection>
-		<UpdateSuperseded>False</UpdateSuperseded>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>TortoiseSVN-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>TortoiseSVN-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>TortoiseSVN-General Availability</DeploymentCollection>
 	</Deployment>
 </ApplicationDef>

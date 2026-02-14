@@ -81,6 +81,21 @@ $url = "$base$ver$number\windows\vmrc-windows.tar"
 	</Supersedence>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
-		<UpdateSuperseded>True</UpdateSuperseded>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>VMware Remote Console-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>VMware Remote Console-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>VMware Remote Console-General Availability</DeploymentCollection>
 	</Deployment>
 </ApplicationDef>

@@ -65,6 +65,21 @@ $ProductCode = $LatestFlash.ParentNode.MsiInstallerData.ProductCode</PrefetchScr
 	</Distribution>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
-		<DeploymentCollection></DeploymentCollection>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>Adobe Flash Player ActiveX-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Adobe Flash Player ActiveX-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Adobe Flash Player ActiveX-General Availability</DeploymentCollection>
 	</Deployment>
 </ApplicationDef>

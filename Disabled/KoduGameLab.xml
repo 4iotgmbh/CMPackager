@@ -60,7 +60,23 @@
 		<Supersedence>True</Supersedence>
 		<Uninstall>False</Uninstall>
 	</Supersedence>
-    <Deployment>
-        <DeploySoftware>True</DeploySoftware>
-    </Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>Microsoft Kodu Game Lab-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Microsoft Kodu Game Lab-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Microsoft Kodu Game Lab-General Availability</DeploymentCollection>
+	</Deployment>
 </ApplicationDef>
