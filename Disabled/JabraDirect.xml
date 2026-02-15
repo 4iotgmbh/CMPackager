@@ -1,0 +1,82 @@
+<ApplicationDef>
+	<Application>
+		<Name>Jabra Direct</Name>
+		<Description>Jabra Direct stellt sicher, dass Ihr Headset stets mit der aktuellen Firmware ausgestattet ist. Damit profitieren Sie von den neuesten Funktionen, Fehlerbehebungen und erhalten einfachen Zugriff auf Kompatibilitäts-Updates</Description>
+		<Publisher>Jabra</Publisher>
+		<AutoInstall>True</AutoInstall>
+		<UserDocumentation>https://www.jabra.com/de-DE/software-and-services/jabra-direct</UserDocumentation>
+		<Icon>JabraDirect.png</Icon>
+	</Application>
+	<Downloads>
+		<Download DeploymentType="DeploymentType1">
+			<PrefetchScript>$URL = $(get-EvergreenApp JabraDirect).uri</PrefetchScript>
+			<URL></URL>
+			<DownloadFileName>JabraDirectSetup.exe</DownloadFileName>
+			<Version></Version>
+			<FullVersion></FullVersion>
+			<DownloadVersionCheck>[String]$Version = (ls $DownloadFile).VersionInfo.Productversion</DownloadVersionCheck>
+			<ExtraCopyFunctions></ExtraCopyFunctions>
+		</Download>
+	</Downloads>
+	<DeploymentTypes>
+		<DeploymentType Name="DeploymentType1">
+			<DeploymentTypeName>JabraDirect Silent Install</DeploymentTypeName>
+			<InstallationType>Script</InstallationType>
+			<Comments>Silent Installer for JabraDirect</Comments>
+			<Language>English</Language>
+			<CacheContent>False</CacheContent>
+			<BranchCache>True</BranchCache>
+			<ContentFallback>True</ContentFallback>
+			<OnSlowNetwork>Download</OnSlowNetwork>
+			<InstallProgram>JabraDirectSetup.exe /install /quiet /norestart</InstallProgram>
+			<UninstallCmd>JabraDirectSetup.exe /uninstall /quiet /norestart</UninstallCmd>
+			<Force32bit>False</Force32bit>
+			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
+			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
+			<UserInteractionMode>Hidden</UserInteractionMode>
+			<ReqUserInteraction>False</ReqUserInteraction>
+			<EstRuntimeMins>5</EstRuntimeMins>
+			<MaxRuntimeMins>15</MaxRuntimeMins>
+			<RebootBehavior>BasedOnExitCode</RebootBehavior>
+			<DetectionMethodType>CustomScript</DetectionMethodType>
+			<ScriptLanguage>PowerShell</ScriptLanguage>
+			<DetectionMethod>
+				If([String](Get-Item -Path "$Env:ProgramFiles\Jabra\Direct6\jabra-direct.exe","${Env:ProgramFiles(x86)}\Jabra\Direct6\jabra-direct.exe" -ErrorAction SilentlyContinue).VersionInfo.FileVersion -ge [Version]$Version){
+					Write-Host "Installed"
+					Exit 0
+				}
+				else {
+					Exit 1
+				}
+			</DetectionMethod>
+		</DeploymentType>
+	</DeploymentTypes>
+	<Distribution>
+		<DistributeContent>True</DistributeContent>
+	</Distribution>
+	<Supersedence>
+		<Supersedence>True</Supersedence>
+		<Uninstall>False</Uninstall>
+		<CleanupSuperseded>True</CleanupSuperseded>
+		<KeepSuperseded>2</KeepSuperseded>
+	</Supersedence>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>JabraDirect-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>JabraDirect-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>JabraDirect-General Availability</DeploymentCollection>
+	</Deployment>
+</ApplicationDef>
