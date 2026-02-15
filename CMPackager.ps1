@@ -1723,10 +1723,10 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 					Write-Host "Superseding $($DeploymentType.LocalizedDisplayName)"
 					$SupersededDeploymentType = $OldAppDeploymentTypes | Where-Object LocalizedDisplayName -eq $DeploymentType.LocalizedDisplayName
 					if ($UninstallOldApp) {
-						Add-CMDeploymentTypeSupersedence -InputObject $DeploymentType -SupersededDeploymentType $SupersededDeploymentType -IsUninstall $true | Out-Null
+						Add-CMDeploymentTypeSupersedence -SupersedingDeploymentType $DeploymentType -SupersededDeploymentType $SupersededDeploymentType -IsUninstall $true | Out-Null
 					}
 					else {
-						Add-CMDeploymentTypeSupersedence -InputObject $DeploymentType -SupersededDeploymentType $SupersededDeploymentType | Out-Null
+						Add-CMDeploymentTypeSupersedence -SupersedingDeploymentType $DeploymentType -SupersededDeploymentType $SupersededDeploymentType | Out-Null
 					}
 				}
 			}
@@ -1754,29 +1754,34 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 			
 			Push-Location
 			Set-Location $CMSite
-			Write-Output "Keeping $Keep superseded revisions of $ApplicationName"
+			Write-Host "Keeping $Keep superseded revisions of $ApplicationName"
 			$Applications = Get-CMApplication -Name "$ApplicationName*" | Where-Object IsSuperseded -eq $true | Sort-Object DateCreated
-			$Applications = $Applications | Select-Object -First ($Applications.Count - $keep)
-			ForEach ($Application in $Applications) {
-				# Get the content location and remove it
-				Write-Host "Cleaning up $($Application.LocalizedDisplayName)"
-				Pop-Location
-				$ApplicationXML = [Microsoft.ConfigurationManagement.ApplicationManagement.Serialization.SccmSerializer]::DeserializeFromString($Application.SDMPackageXML, $true)
-				$Location = $ApplicationXML.DeploymentTypes[0].Installer.Contents | Select-Object -ExpandProperty Location # BUGBUG: Get all the deployment locations and remove them
-				Remove-Item -LiteralPath $Location -Recurse
-				Add-LogContent "Removed application content from $Location`n"
-				# Remove the deployments and app itself
-				Push-Location
-				Set-Location $CMSite
-				$Application | Get-CMApplicationDeployment | Remove-CMApplicationDeployment -Force
-				Get-CMApplication $Application.LocalizedDisplayName | Remove-CMApplication -Force
-				## Send an Email if an Application was successfully cleaned up and record the Application Name and Version for the Email
-				$Global:SendEmail = $true; $Global:SendEmail | Out-Null
-				$Global:EmailBody += "      - Removed $($Application.LocalizedDisplayName) `n"
-				Add-LogContent "Removed $($Application.LocalizedDisplayName) $($Application.SoftwareVersion)`n"
+			If ($Applications.Count -le $keep) {
+				Write-Host "Number of superseded applications ($($Applications.Count)) is less than or equal to the number to keep ($keep), no applications will be removed"
+			}
+			else {
+				Write-Host "Number of superseded applications ($($Applications.Count)) is more than or equal to the number to keep ($keep), oldest applications will be removed"
+				$Applications = $Applications | Select-Object -First ($Applications.Count - $keep)
+				ForEach ($Application in $Applications) {
+					# Get the content location and remove it
+					Write-Host "Cleaning up $($Application.LocalizedDisplayName)"
+					Pop-Location
+					$ApplicationXML = [Microsoft.ConfigurationManagement.ApplicationManagement.Serialization.SccmSerializer]::DeserializeFromString($Application.SDMPackageXML, $true)
+					$Location = $ApplicationXML.DeploymentTypes[0].Installer.Contents | Select-Object -ExpandProperty Location # BUGBUG: Get all the deployment locations and remove them
+					Remove-Item -LiteralPath $Location -Recurse
+					Add-LogContent "Removed application content from $Location`n"
+					# Remove the deployments and app itself
+					Push-Location
+					Set-Location $CMSite
+					$Application | Get-CMApplicationDeployment | Remove-CMApplicationDeployment -Force
+					Get-CMApplication $Application.LocalizedDisplayName | Remove-CMApplication -Force
+					## Send an Email if an Application was successfully cleaned up and record the Application Name and Version for the Email
+					$Global:SendEmail = $true; $Global:SendEmail | Out-Null
+					$Global:EmailBody += "      - Removed $($Application.LocalizedDisplayName) `n"
+					Add-LogContent "Removed $($Application.LocalizedDisplayName) $($Application.SoftwareVersion)`n"
+				}
 			}
 			Pop-Location
-			
 		}
 		Write-Output $true
 	}	

@@ -10,3 +10,5 @@ Recipes/*
 
 # Except for the Template.xml
 !Recipes/Template.xml
+.aider*
+.env
