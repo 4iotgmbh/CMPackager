@@ -53,7 +53,9 @@
 	</Distribution>
 	<Supersedence>
 		<Supersedence>True</Supersedence>
-		<Uninstall>True</Uninstall>
+		<Uninstall>False</Uninstall>
+		<CleanupSuperseded>True</CleanupSuperseded>
+		<KeepSuperseded>2</KeepSuperseded>
 	</Supersedence>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>

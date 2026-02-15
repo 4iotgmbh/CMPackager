@@ -60,6 +60,8 @@
 	<Supersedence>
 		<Supersedence>True</Supersedence>
 		<Uninstall>False</Uninstall>
+		<CleanupSuperseded>True</CleanupSuperseded>
+		<KeepSuperseded>2</KeepSuperseded>
 	</Supersedence>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>

@@ -47,6 +47,12 @@
 		<DistributeContent>True</DistributeContent>
 		<DistributeToGroup>All DPs except PXE</DistributeToGroup>
 	</Distribution>
+	<Supersedence>
+		<Supersedence>True</Supersedence>
+		<Uninstall>False</Uninstall>
+		<CleanupSuperseded>True</CleanupSuperseded>
+		<KeepSuperseded>2</KeepSuperseded>
+	</Supersedence>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>

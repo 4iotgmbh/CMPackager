@@ -47,6 +47,12 @@ Do not expect this application to have a valid installation reports.</Descriptio
 	<Distribution>
 		<DistributeContent>True</DistributeContent>
 	</Distribution>
+	<Supersedence>
+		<Supersedence>True</Supersedence>
+		<Uninstall>False</Uninstall>
+		<CleanupSuperseded>True</CleanupSuperseded>
+		<KeepSuperseded>2</KeepSuperseded>
+	</Supersedence>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
