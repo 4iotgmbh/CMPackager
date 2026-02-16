@@ -12,3 +12,4 @@ Recipes/*
 !Recipes/Template.xml
 .aider*
 .env
+ExtraFiles/.DS_Store
