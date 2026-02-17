@@ -10,6 +10,9 @@ Recipes/*
 
 # Except for the Template.xml
 !Recipes/Template.xml
+
+# Misc artifacts unrelated to project
 .aider*
 .env
 ExtraFiles/.DS_Store
+.DS_Store
