@@ -57,10 +57,13 @@ if ($null -ne $Applications) {
         Write-Host ("Processing {0}..." -f $item.ID) -ForegroundColor Green
         try {
             $ApplicationYAML = Invoke-RestMethod ("https://raw.githubusercontent.com/microsoft/winget-pkgs/refs/heads/master/manifests/{0}/{1}/{2}/$($Item.ID).installer.yaml" -f $Item.ID.Substring(0, 1).ToLower(), $Item.ID.Replace('.', '/'), $Item.version) -UseBasicParsing -Method Get -ErrorAction Stop | ConvertFrom-Yaml -ErrorAction Stop
+            $LocalizationYAML = Invoke-RestMethod ("https://raw.githubusercontent.com/microsoft/winget-pkgs/refs/heads/master/manifests/{0}/{1}/{2}/$($Item.ID).locale.en-US.yaml" -f $Item.ID.Substring(0, 1).ToLower(), $Item.ID.Replace('.', '/'), $Item.version) -UseBasicParsing -Method Get -ErrorAction Stop | ConvertFrom-Yaml -ErrorAction Stop
             foreach ($installer in $ApplicationYAML.Installers) {
                 $applicationdetails = Get-WinGetPackageInfo -id $item.ID -ErrorAction Stop
                 [PSCustomObject]@{
-                    'Name'                        = $item.ID
+                    'ID'                          = $item.ID
+                    'Name'                        = if ($LocalizationYAML.PackageName) { $LocalizationYAML.PackageName } else { "Not found" }
+                    'Installation Notes'          = if ($LocalizationYAML.InstallationNotes) { $LocalizationYAML.InstallationNotes } else { "Not found" }
                     'Author'                      = if ($applicationdetails.Author) { $applicationdetails.Author } else { "Not found" }
                     'Publisher'                   = if ($applicationdetails.Publisher) { $applicationdetails.Publisher } else { "Not found" }
                     'Description'                 = if ($applicationdetails.Description) { $applicationdetails.Description } else { "Not found" }
