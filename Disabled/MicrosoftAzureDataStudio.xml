@@ -1,0 +1,97 @@
+<ApplicationDef>
+	<Application>
+		<Name>Azure Data Studio</Name>
+		<Description>Azure Data Studio is a cross-platform database tool for data professionals using on-premises and cloud data platforms on Windows, macOS, and Linux. Azure Data Studio offers a modern editor experience with IntelliSense, code snippets, source control integration, and an integrated terminal. It's engineered with the data platform user in mind, with built-in charting of query result sets and customizable dashboards.</Description>
+		<Publisher>Microsoft</Publisher>
+		<AutoInstall>True</AutoInstall>
+		<UserDocumentation>https://docs.microsoft.com/en-us/sql/azure-data-studio</UserDocumentation>
+		<Icon>azuredatastudio.png</Icon>
+	</Application>
+	<Downloads>
+		<Download DeploymentType="DeploymentType1">
+			<PrefetchScript>$Url = (Invoke-WebRequest https://azuredatastudio-update.azurewebsites.net/latest/win32-x64/stable -MaximumRedirection 0 -ErrorAction SilentlyContinue).Headers.Location
+			[string]$Download.Version = if ($Url -match '.*/azuredatastudio-windows-setup-(\d+\.\d+\.\d+)\.exe') {$matches[1]}
+			$Version = $Download.Version
+			$FullVersion = $Download.Version</PrefetchScript>
+			<URL>https://azuredatastudio-update.azurewebsites.net/latest/win32-x64/stable</URL>
+			<DownloadFileName>azuredatastudio-setup.exe</DownloadFileName>
+			<Version></Version>
+			<FullVersion></FullVersion>
+			<DownloadVersionCheck>$Version = ((Get-Item $TempDir\$DownloadFileName).VersionInfo.FileVersion).trim()</DownloadVersionCheck>
+			<ExtraCopyFunctions></ExtraCopyFunctions>
+		</Download>
+	</Downloads>
+	<DeploymentTypes>
+		<DeploymentType Name="DeploymentType1">
+			<DeploymentTypeName>Azure Data Studio setup</DeploymentTypeName>
+			<InstallationType>Script</InstallationType>
+			<CacheContent>False</CacheContent>
+			<BranchCache>True</BranchCache>
+			<ContentFallback>True</ContentFallback>
+			<OnSlowNetwork>Download</OnSlowNetwork>
+			<InstallProgram>azuredatastudio-setup.exe /VERYSILENT /NORESTART /MERGETASKS=!runcode</InstallProgram>
+			<UninstallCmd>"%ProgramFiles%\Azure Data Studio\unins000.exe" /VERYSILENT</UninstallCmd>
+			<UninstallOption>NoneRequired</UninstallOption>
+			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
+			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
+			<UserInteractionMode>Hidden</UserInteractionMode>
+			<EstRuntimeMins>15</EstRuntimeMins>
+			<MaxRuntimeMins>30</MaxRuntimeMins>
+			<RebootBehavior>BasedOnExitCode</RebootBehavior>
+			<DetectionMethodType>Custom</DetectionMethodType>
+			<CustomDetectionMethods>
+				<DetectionClause>
+					<DetectionClauseType>File</DetectionClauseType>
+					<Name>azuredatastudio.exe</Name>
+					<Path>%ProgramFiles%\Azure Data Studio\</Path>
+					<PropertyType>Version</PropertyType>
+					<ExpectedValue>$Version</ExpectedValue>
+					<ExpressionOperator>GreaterEquals</ExpressionOperator>
+					<Value>True</Value>
+				</DetectionClause>
+			</CustomDetectionMethods>
+			<InstallBehavior>
+				<InstallBehaviorProcess DisplayName="Azure Data Studio">
+					<InstallBehaviorExe>azuredatastudio.exe</InstallBehaviorExe>
+				</InstallBehaviorProcess>
+			</InstallBehavior>
+			<RequirementsRules>
+				<RequirementsRule>
+					<RequirementsRuleType>Existential</RequirementsRuleType>
+					<RequirementsRuleValue>
+						<RuleValue>True</RuleValue>
+					</RequirementsRuleValue>
+					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
+				</RequirementsRule>
+			</RequirementsRules>
+		</DeploymentType>
+	</DeploymentTypes>
+	<Distribution>
+		<DistributeContent>True</DistributeContent>
+	</Distribution>
+	<Supersedence>
+		<Supersedence>True</Supersedence>
+		<Uninstall>False</Uninstall>
+		<CleanupSuperseded>True</CleanupSuperseded>
+		<KeepSuperseded>2</KeepSuperseded>
+	</Supersedence>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>Azure Data Studio-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Azure Data Studio-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Azure Data Studio-General Availability</DeploymentCollection>
+	</Deployment>
+</ApplicationDef>
