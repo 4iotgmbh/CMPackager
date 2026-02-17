@@ -12,70 +12,7 @@
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
 			<URL></URL>
-			<PrefetchScript>
-# Reliably determine the current Cisco Jabber MSI download URL
-# Method: Query the winget (Windows Package Manager) manifest from GitHub
-# This is publicly accessible, machine-readable, and always up to date.
-
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-$userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
-try {
-    # Fetch the winget manifest index for Cisco.Jabber from GitHub
-    # The installer YAML in the winget-pkgs repo contains the current MSI URL
-    $apiUrl = "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/c/Cisco/Jabber"
-    
-    $headers = @{
-        "User-Agent" = $userAgent
-        "Accept"     = "application/vnd.github.v3+json"
-    }
-
-    # Step 1: List version folders to find the latest
-    $versions = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction Stop
-    
-    # Sort versions properly (semantic versioning) and pick the latest
-    $latestVersion = $versions |
-        Where-Object { $_.type -eq "dir" } |
-        Sort-Object { [version]($_.name -replace '[^0-9.]', '') } -Descending |
-        Select-Object -First 1
-
-    Write-verbose "Latest version found: $($latestVersion.name)"
-
-    # Step 2: Get the installer manifest (contains the MSI URL)
-    $versionUrl = "$apiUrl/$($latestVersion.name)"
-    $files = Invoke-RestMethod -Uri $versionUrl -Headers $headers -ErrorAction Stop
-    
-    $installerFile = $files | Where-Object { $_.name -match "installer" }
-    
-    if ($installerFile) {
-        # Step 3: Download and parse the installer YAML
-        $yamlContent = Invoke-RestMethod -Uri $installerFile.download_url -Headers $headers -ErrorAction Stop
-        
-        # Extract the MSI URL from the YAML (line starts with InstallerUrl:)
-        $msiMatch = [regex]::Match($yamlContent, 'InstallerUrl:\s*(https://[^\s]+\.msi)')
-        
-        if ($msiMatch.Success) {
-            $Url = $msiMatch.Groups[1].Value
-            
-            
-            # Optional: verify the URL is reachable
-            # $headResponse = Invoke-WebRequest -Uri $msiUrl -Method Head -Headers @{"User-Agent"=$userAgent} -UseBasicParsing
-            # Write-Output "File size: $([math]::Round($headResponse.Headers.'Content-Length'/1MB, 1)) MB"
-        }
-        else {
-            Write-Warning "Could not parse MSI URL from installer manifest."
-            Write-verbose $yamlContent
-        }
-    }
-    else {
-        Write-Warning "Installer manifest file not found in version folder."
-    }
-}
-catch {
-    Write-Error "Error: $($_.Exception.Message)"
-}
-			</PrefetchScript>
+			<PrefetchScript>$URL = Get-MSIInstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/c/Cisco/Jabber"</PrefetchScript>
 			<DownloadFileName>CiscoJabberSetup.msi</DownloadFileName>
 			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<Version></Version>
@@ -96,7 +33,7 @@ catch {
 			<InstallationMSI>CiscoJabberSetup.msi</InstallationMSI>
 			<!-- https://www.cisco.com/c/en/us/td/docs/voice_ip_comm/jabber/12_9/cjab_b_deploy-jabber-on-premises-129/cjab_b_deploy-jabber-on-premises-129_chapter_010000.html#JABW_RF_CF4EAB44_00 -->
 			<InstallProgram>msiexec.exe /i CiscoJabberSetup.msi /qn /norestart /l*v install.log</InstallProgram>
-			<UninstallCmd>msiexec.exe /x CiscoJabberSetup.msi /q /qn /norestart /l*v uninstall.log</UninstallCmd>
+			<UninstallCmd>msiexec.exe /x CiscoJabberSetup.msi /qn /norestart /l*v uninstall.log</UninstallCmd>
 			<Force32bit>False</Force32bit>
 			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
 			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>

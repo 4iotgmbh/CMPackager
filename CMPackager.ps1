@@ -298,6 +298,146 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 		}
 	}
 
+function Get-MSIInstallerURLfromWinget {
+  param (
+    [parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$apiUrl
+  )
+  # Reliably determine the current MSI download URL
+  # Method: Query the winget (Windows Package Manager) manifest from GitHub
+  # This is publicly accessible, machine-readable, and always up to date.
+
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+  $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+  try {
+      # Fetch the winget manifest index from GitHub
+      # The installer YAML in the winget-pkgs repo contains the current MSI URL
+      
+      $headers = @{
+          "User-Agent" = $userAgent
+          "Accept"     = "application/vnd.github.v3+json"
+      }
+
+      # Step 1: List version folders to find the latest
+      $versions = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction Stop
+      
+      # Sort versions properly (semantic versioning only, skip the rest) and pick the latest
+      $latestVersion = $versions |
+          Where-Object { $_.type -eq "dir" } |
+          Where-Object { $_.name -notmatch '[A-Za-z]'} |
+          Sort-Object { [version]($_.name -replace '[^0-9.]', '') } -Descending |
+          Select-Object -First 1
+
+      Write-verbose "Latest version found: $($latestVersion.name)"
+
+      # Step 2: Get the installer manifest (contains the MSI URL)
+      $versionUrl = "$apiUrl/$($latestVersion.name)"
+      $files = Invoke-RestMethod -Uri $versionUrl -Headers $headers -ErrorAction Stop
+      
+      $installerFile = $files | Where-Object { $_.name -match "installer" }
+      
+      if ($installerFile) {
+          # Step 3: Download and parse the installer YAML
+          $yamlContent = Invoke-RestMethod -Uri $installerFile.download_url -Headers $headers -ErrorAction Stop
+          
+          # Extract the MSI URL from the YAML (line starts with InstallerUrl:)
+          $msiMatch = [regex]::Match($yamlContent, 'InstallerUrl:\s*(https://[^\s]+\.msi)')
+          
+          if ($msiMatch.Success) {
+              $msiMatch.Groups[1].Value
+              
+              
+              # Optional: verify the URL is reachable
+              # $headResponse = Invoke-WebRequest -Uri $msiUrl -Method Head -Headers @{"User-Agent"=$userAgent} -UseBasicParsing
+              # Write-Output "File size: $([math]::Round($headResponse.Headers.'Content-Length'/1MB, 1)) MB"
+          }
+          else {
+              Write-Warning "Could not parse MSI URL from installer manifest."
+              Write-verbose $yamlContent
+          }
+      }
+      else {
+          Write-Warning "Installer manifest file not found in version folder."
+      }
+  }
+  catch {
+      Write-Error "Error: $($_.Exception.Message)"
+  }
+}
+
+function Get-ExeInstallerURLfromWinget {
+  param (
+    [parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$apiUrl
+  )
+  # Reliably determine the current EXE download URL
+  # Method: Query the winget (Windows Package Manager) manifest from GitHub
+  # This is publicly accessible, machine-readable, and always up to date.
+
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+  $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+  try {
+      # Fetch the winget manifest index from GitHub
+      # The installer YAML in the winget-pkgs repo contains the current MSI URL
+      
+      $headers = @{
+          "User-Agent" = $userAgent
+          "Accept"     = "application/vnd.github.v3+json"
+      }
+
+      # Step 1: List version folders to find the latest
+      $versions = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction Stop
+      
+      # Sort versions properly (semantic versioning only, skip the rest) and pick the latest
+      $latestVersion = $versions |
+          Where-Object { $_.type -eq "dir" } |
+          Where-Object { $_.name -notmatch '[A-Za-z]'} |
+          Sort-Object { [version]($_.name -replace '[^0-9.]', '') } -Descending |
+          Select-Object -First 1
+
+      Write-verbose "Latest version found: $($latestVersion.name)"
+
+      # Step 2: Get the installer manifest (contains the MSI URL)
+      $versionUrl = "$apiUrl/$($latestVersion.name)"
+      $files = Invoke-RestMethod -Uri $versionUrl -Headers $headers -ErrorAction Stop
+      
+      $installerFile = $files | Where-Object { $_.name -match "installer" }
+      
+      if ($installerFile) {
+          # Step 3: Download and parse the installer YAML
+          $yamlContent = Invoke-RestMethod -Uri $installerFile.download_url -Headers $headers -ErrorAction Stop
+          
+          # Extract the MSI URL from the YAML (line starts with InstallerUrl:)
+          $exeMatch = [regex]::Match($yamlContent, 'InstallerUrl:\s*(https://[^\s]+\.exe)')
+          
+          if ($exeMatch.Success) {
+              $exeMatch.Groups[1].Value
+              
+              
+              # Optional: verify the URL is reachable
+              # $headResponse = Invoke-WebRequest -Uri $msiUrl -Method Head -Headers @{"User-Agent"=$userAgent} -UseBasicParsing
+              # Write-Output "File size: $([math]::Round($headResponse.Headers.'Content-Length'/1MB, 1)) MB"
+          }
+          else {
+              Write-Warning "Could not parse EXE URL from installer manifest."
+              Write-verbose $yamlContent
+          }
+      }
+      else {
+          Write-Warning "Installer manifest file not found in version folder."
+      }
+  }
+  catch {
+      Write-Error "Error: $($_.Exception.Message)"
+  }
+}
+
 	function Get-MSIInfo {
 		param (
 			[parameter(Mandatory = $true)]

@@ -64,7 +64,7 @@ if ($null -ne $Applications) {
                     'Author'                      = if ($applicationdetails.Author) { $applicationdetails.Author } else { "Not found" }
                     'Publisher'                   = if ($applicationdetails.Publisher) { $applicationdetails.Publisher } else { "Not found" }
                     'Description'                 = if ($applicationdetails.Description) { $applicationdetails.Description } else { "Not found" }
-                    'Product Code'                = if ($applicationdetails.'ProductCode') { $applicationdetails.'ProductCode' } else { "Not found" }
+                    'Product Code'                = if ($applicationYAML.ProductCode) { $applicationYAML.ProductCode } else { "Not found" }
                     'Version'                     = [version]$item.Version
                     'Release Date'                = if ($applicationdetails.'Release Date') { $applicationdetails.'Release Date' } else { "Not found" }
                     'Install Modes'               = if ($ApplicationYAML.InstallModes) { $ApplicationYAML.InstallModes -join ', ' } else { "Not found" }
