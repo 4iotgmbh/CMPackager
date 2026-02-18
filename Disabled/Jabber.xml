@@ -4,7 +4,7 @@
 		<!-- https://www.cisco.com/c/en/us/td/docs/voice_ip_comm/jabber/12_9/cjab_b_deploy-jabber-on-premises-129/cjab_b_deploy-jabber-on-premises-129_chapter_010000.html#JABW_RF_CF4EAB44_00 -->
 		<Name>Cisco Jabber</Name>
 		<Description>Cisco Jabber for Windows brings presence, instant messaging, VoIP, and audio, video, and web conferencing to your PC.</Description>
-		<Publisher>Cisco Systems Inc.</Publisher>
+		<Publisher>Cisco Systems Inc</Publisher>
 		<AutoInstall>True</AutoInstall>
 		<UserDocumentation>https://www.cisco.com/c/en/us/products/unified-communications/jabber/index.html</UserDocumentation>
 		<Icon>Jabber.png</Icon>
