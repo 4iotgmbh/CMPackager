@@ -1,10 +1,12 @@
 <#	
 	.NOTES
 	===========================================================================
-	 Created on:   	1/9/2018 11:34 AM
-	 Last Updated:  05/06/2020
-	 Author:		Andrew Jimenez (asjimene) - https://github.com/asjimene/
-	 Filename:     	CMPackager.ps1
+	 Created on:   		1/9/2018 11:34 AM
+	 Last Updated:  	02/26/2026
+	 Original Author:	Andrew Jimenez (asjimene) - https://github.com/asjimene/
+	 Fork Maintainer: Mirko Schnellbach (4IoTMirko) - 4IoT GmbH - https://github.com/4iotgmbh
+	 Filename:     		CMPackager.ps1
+	 Fork URL:				https://github.com/4iotgmbh/CMPackager
 	===========================================================================
 	.DESCRIPTION
 		Packages Applications for ConfigMgr using XML Based Recipe Files
@@ -68,7 +70,7 @@ DynamicParam {
 
 process {
 
-	$Global:ScriptVersion = "20.05.06.0"
+	$Global:ScriptVersion = "26.02.26.0 - 4IoT Gmbh fork"
 
 	$Global:ScriptRoot = $PSScriptRoot
 
@@ -298,24 +300,34 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 		}
 	}
 
-function Get-MSIInstallerURLfromWinget {
+function Get-InstallerURLfromWinget {
   param (
     [parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
-    [string]$apiUrl
+    [string]$apiUrl,
+
+    [parameter(Mandatory = $true)]
+    [ValidateSet("msi", "exe")]
+    [string]$InstallerType,
+
+    [parameter(Mandatory = $false)]
+    [ValidateSet("x64", "x86", "arm64", "arm")]
+    [string]$Architecture,
+
+    [parameter(Mandatory = $false)]
+    [ValidateSet("machine", "user")]
+    [string]$Scope
   )
-  # Reliably determine the current MSI download URL
+  # Reliably determine the current installer download URL
   # Method: Query the winget (Windows Package Manager) manifest from GitHub
   # This is publicly accessible, machine-readable, and always up to date.
+  # Use -Architecture and -Scope to select among multiple installers in the manifest.
 
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
   $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
   try {
-      # Fetch the winget manifest index from GitHub
-      # The installer YAML in the winget-pkgs repo contains the current MSI URL
-      
       $headers = @{
           "User-Agent" = $userAgent
           "Accept"     = "application/vnd.github.v3+json"
@@ -323,7 +335,7 @@ function Get-MSIInstallerURLfromWinget {
 
       # Step 1: List version folders to find the latest
       $versions = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction Stop
-      
+
       # Sort versions properly (semantic versioning only, skip the rest) and pick the latest
       $latestVersion = $versions |
           Where-Object { $_.type -eq "dir" } |
@@ -331,105 +343,80 @@ function Get-MSIInstallerURLfromWinget {
           Sort-Object { [version]($_.name -replace '[^0-9.]', '') } -Descending |
           Select-Object -First 1
 
-      Write-verbose "Latest version found: $($latestVersion.name)"
+      Write-Verbose "Latest version found: $($latestVersion.name)"
 
-      # Step 2: Get the installer manifest (contains the MSI URL)
+      # Step 2: Get the installer manifest
       $versionUrl = "$apiUrl/$($latestVersion.name)"
       $files = Invoke-RestMethod -Uri $versionUrl -Headers $headers -ErrorAction Stop
-      
+
       $installerFile = $files | Where-Object { $_.name -match "installer" }
-      
+
       if ($installerFile) {
           # Step 3: Download and parse the installer YAML
           $yamlContent = Invoke-RestMethod -Uri $installerFile.download_url -Headers $headers -ErrorAction Stop
-          
-          # Extract the MSI URL from the YAML (line starts with InstallerUrl:)
-          $msiMatch = [regex]::Match($yamlContent, 'InstallerUrl:\s*(https://[^\s]+\.msi)')
-          
-          if ($msiMatch.Success) {
-              $msiMatch.Groups[1].Value
-              
-              
-              # Optional: verify the URL is reachable
-              # $headResponse = Invoke-WebRequest -Uri $msiUrl -Method Head -Headers @{"User-Agent"=$userAgent} -UseBasicParsing
-              # Write-Output "File size: $([math]::Round($headResponse.Headers.'Content-Length'/1MB, 1)) MB"
+
+          # Parse the Installers: list into individual blocks for filtering
+          $installerBlocks = @()
+          $lines = $yamlContent -split '\r?\n'
+          $inInstallers = $false
+          $currentBlock = $null
+
+          foreach ($line in $lines) {
+              if ($line -match '^Installers:\s*$') {
+                  $inInstallers = $true
+                  continue
+              }
+              if ($inInstallers) {
+                  if ($line -match '^- ') {
+                      if ($null -ne $currentBlock) { $installerBlocks += $currentBlock }
+                      $currentBlock = $line.Substring(2) + "`n"
+                  } elseif ($line -match '^  ') {
+                      if ($null -ne $currentBlock) { $currentBlock += $line.TrimStart() + "`n" }
+                  } elseif ($line -notmatch '^$') {
+                      break
+                  }
+              }
           }
-          else {
-              Write-Warning "Could not parse MSI URL from installer manifest."
-              Write-verbose $yamlContent
+          if ($null -ne $currentBlock) { $installerBlocks += $currentBlock }
+
+          # Fall back to full YAML if parsing yielded nothing
+          if ($installerBlocks.Count -eq 0) {
+              $urlMatch = [regex]::Match($yamlContent, "(?i)InstallerUrl:\s*(https://[^\s]+\.$InstallerType)")
+              if ($urlMatch.Success) { $urlMatch.Groups[1].Value }
+              else { Write-Warning "Could not parse $InstallerType URL from installer manifest." }
+              return
           }
-      }
-      else {
-          Write-Warning "Installer manifest file not found in version folder."
-      }
-  }
-  catch {
-      Write-Error "Error: $($_.Exception.Message)"
-  }
-}
 
-function Get-ExeInstallerURLfromWinget {
-  param (
-    [parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
-    [string]$apiUrl
-  )
-  # Reliably determine the current EXE download URL
-  # Method: Query the winget (Windows Package Manager) manifest from GitHub
-  # This is publicly accessible, machine-readable, and always up to date.
-
-  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-  $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
-  try {
-      # Fetch the winget manifest index from GitHub
-      # The installer YAML in the winget-pkgs repo contains the current MSI URL
-      
-      $headers = @{
-          "User-Agent" = $userAgent
-          "Accept"     = "application/vnd.github.v3+json"
-      }
-
-      # Step 1: List version folders to find the latest
-      $versions = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction Stop
-      
-      # Sort versions properly (semantic versioning only, skip the rest) and pick the latest
-      $latestVersion = $versions |
-          Where-Object { $_.type -eq "dir" } |
-          Where-Object { $_.name -notmatch '[A-Za-z]'} |
-          Sort-Object { [version]($_.name -replace '[^0-9.]', '') } -Descending |
-          Select-Object -First 1
-
-      Write-verbose "Latest version found: $($latestVersion.name)"
-
-      # Step 2: Get the installer manifest (contains the MSI URL)
-      $versionUrl = "$apiUrl/$($latestVersion.name)"
-      $files = Invoke-RestMethod -Uri $versionUrl -Headers $headers -ErrorAction Stop
-      
-      $installerFile = $files | Where-Object { $_.name -match "installer" }
-      
-      if ($installerFile) {
-          # Step 3: Download and parse the installer YAML
-          $yamlContent = Invoke-RestMethod -Uri $installerFile.download_url -Headers $headers -ErrorAction Stop
-          
-          # Extract the MSI URL from the YAML (line starts with InstallerUrl:)
-          $exeMatch = [regex]::Match($yamlContent, 'InstallerUrl:\s*(https://[^\s]+\.exe)')
-          
-          if ($exeMatch.Success) {
-              $exeMatch.Groups[1].Value
-              
-              
-              # Optional: verify the URL is reachable
-              # $headResponse = Invoke-WebRequest -Uri $msiUrl -Method Head -Headers @{"User-Agent"=$userAgent} -UseBasicParsing
-              # Write-Output "File size: $([math]::Round($headResponse.Headers.'Content-Length'/1MB, 1)) MB"
+          # Filter by Architecture if specified
+          $filtered = $installerBlocks
+          if ($Architecture) {
+              $archFiltered = $filtered | Where-Object { $_ -match "(?i)Architecture:\s*$Architecture\b" }
+              if ($archFiltered) { $filtered = $archFiltered }
+              else { Write-Warning "No installer found for Architecture '$Architecture', trying all entries." }
           }
-          else {
-              Write-Warning "Could not parse EXE URL from installer manifest."
-              Write-verbose $yamlContent
+
+          # Filter by Scope if specified
+          if ($Scope) {
+              $scopeFiltered = $filtered | Where-Object { $_ -match "(?i)Scope:\s*$Scope\b" }
+              if ($scopeFiltered) { $filtered = $scopeFiltered }
+              else { Write-Warning "No installer found for Scope '$Scope', trying all filtered entries." }
           }
-      }
-      else {
+
+          $targetBlock = $filtered | Select-Object -First 1
+
+          if ($targetBlock) {
+              $urlMatch = [regex]::Match($targetBlock, "(?i)InstallerUrl:\s*(https://[^\s]+\.$InstallerType)")
+              if ($urlMatch.Success) {
+                  $urlMatch.Groups[1].Value
+              } else {
+                  Write-Warning "Could not parse $InstallerType URL from installer manifest."
+                  Write-Verbose $targetBlock
+              }
+          } else {
+              Write-Warning "No installer matching the specified criteria found."
+              Write-Verbose $yamlContent
+          }
+      } else {
           Write-Warning "Installer manifest file not found in version folder."
       }
   }

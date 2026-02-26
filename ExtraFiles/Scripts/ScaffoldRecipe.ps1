@@ -147,9 +147,9 @@ process {
             # Build PrefetchScript using the WinGet API URL and appropriate function
             if ($package.APIUrl -and $package.APIUrl -ne "Not found") {
                 if ($installationType -eq 'MSI') {
-                    $prefetchScript = "`$URL = Get-MSIInstallerURLfromWinget -apiUrl `"$($package.APIUrl)`""
+                    $prefetchScript = "`$URL = Get-InstallerURLfromWinget -apiUrl `"$($package.APIUrl)`" -InstallerType msi"
                 } else {
-                    $prefetchScript = "`$URL = Get-ExeInstallerURLfromWinget -apiUrl `"$($package.APIUrl)`""
+                    $prefetchScript = "`$URL = Get-InstallerURLfromWinget -apiUrl `"$($package.APIUrl)`" -InstallerType exe"
                 }
                 $download.PrefetchScript = $prefetchScript
                 $download.URL = ""

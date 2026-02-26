@@ -12,7 +12,7 @@
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
 			<URL></URL>
-			<PrefetchScript>$URL = Get-MSIInstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/c/Cisco/Jabber"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/c/Cisco/Jabber" -InstallerType msi -Architecture x64</PrefetchScript>
 			<DownloadFileName>CiscoJabberSetup.msi</DownloadFileName>
 			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<Version></Version>

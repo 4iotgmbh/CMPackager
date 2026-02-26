@@ -79,15 +79,14 @@ CMPackager includes tools to leverage the Windows Package Manager (WinGet) repos
 
 **Dynamic URL Functions in CMPackager.ps1**:
 
-- **`Get-MSIInstallerURLfromWinget`** ([CMPackager.ps1:301](CMPackager.ps1#L301)) — Queries GitHub API for WinGet package manifests, parses the latest version's installer YAML, and returns the MSI download URL
-- **`Get-ExeInstallerURLfromWinget`** ([CMPackager.ps1:371](CMPackager.ps1#L371)) — Same functionality for EXE installers
+- **`Get-InstallerURLfromWinget`** ([CMPackager.ps1:301](CMPackager.ps1#L301)) — Queries GitHub API for WinGet package manifests, parses the latest version's installer YAML, and returns the installer download URL. Parameters: `-apiUrl` (required), `-InstallerType` (`msi` or `exe`, required), `-Architecture` (`x64`, `x86`, `arm64`, `arm`, optional), `-Scope` (`machine` or `user`, optional). When multiple installers exist in the manifest, Architecture and Scope narrow the selection.
 
 These functions are called within recipe `<PrefetchScript>` blocks to dynamically fetch current download URLs at runtime:
 
 ```powershell
 # Example PrefetchScript usage in a recipe:
 $apiUrl = "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/a/Adobe/Acrobat/Reader/64-bit"
-$DownloadURL = Get-MSIInstallerURLfromWinget -apiUrl $apiUrl
+$DownloadURL = Get-InstallerURLfromWinget -apiUrl $apiUrl -InstallerType msi -Architecture x64 -Scope machine
 ```
 
 **Complete Recipe Creation Workflow**:
@@ -115,7 +114,7 @@ cd ..\..
 - **`Connect-ConfigMgr`** — Establishes SCCM site connection and imports the ConfigurationManager module
 - **`Add-LogContent`** — Centralized logging with rotation (`$Global:LogPath`)
 - **`Get-MSIInfo`** / **`Get-MSISourceFileVersion`** — Extract metadata from MSI files using COM
-- **`Get-MSIInstallerURLfromWinget`** / **`Get-ExeInstallerURLfromWinget`** — Query WinGet package manifests from GitHub to retrieve current installer download URLs; used in recipe PrefetchScripts to dynamically obtain the latest version download links from the winget-pkgs repository
+- **`Get-InstallerURLfromWinget`** — Queries WinGet package manifests from GitHub to retrieve the current installer download URL; used in recipe PrefetchScripts with `-InstallerType msi|exe` and optional `-Architecture`/`-Scope` to select among multiple installers
 
 ### Global State
 
