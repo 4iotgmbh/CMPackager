@@ -6,22 +6,17 @@
 		<AutoInstall>True</AutoInstall>
 		<UserDocumentation>https://www.shotcut.org/tutorials/</UserDocumentation>
 		<Icon>Shotcut.png</Icon>
-		<FolderPath></FolderPath>
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>
-				$URL = "https://github.com$((Invoke-WebRequest https://github.com/mltframework/shotcut/releases/latest -UseBasicParsing | Select -expand links | ? href -like "*shotcut-win64-*.exe").href.ToString())"
-				$Download.Version = ([String](Invoke-RestMethod https://api.github.com/repos/mltframework/shotcut/releases/latest).tag_name.Trim('v')).TrimStart().TrimEnd()
-				Add-LogContent "Found Version: $Download.Version "
-				$Version = $Download.Version
-			</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Meltytech/Shotcut" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>Shotcutx64.exe</DownloadFileName>
-			<DownloadVersionCheck></DownloadVersionCheck>
+			<DownloadVersionCheck>$Version = ((Get-Item $TempDir\$DownloadFileName).VersionInfo.ProductVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<Version></Version>
 			<FullVersion></FullVersion>
 			<AppRepoFolder></AppRepoFolder>
+			<ExtraCopyFunctions></ExtraCopyFunctions>
 		</Download>
 	</Downloads>
 	<DeploymentTypes>
@@ -56,9 +51,15 @@
 					<Is64Bit>True</Is64Bit>
 				</DetectionClause>
 			</CustomDetectionMethods>
-			<Requirements>
-				<RuleName>Existential of AutoPackage - OSArchitecture x64 Not Equal to 0</RuleName>
-			</Requirements>
+			<RequirementsRules>
+				<RequirementsRule>
+					<RequirementsRuleType>Existential</RequirementsRuleType>
+					<RequirementsRuleValue>
+						<RuleValue>True</RuleValue>
+					</RequirementsRuleValue>
+					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
+				</RequirementsRule>
+			</RequirementsRules>
 		</DeploymentType>
 	</DeploymentTypes>
 	<Distribution>

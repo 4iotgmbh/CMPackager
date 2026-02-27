@@ -9,7 +9,7 @@
     </Application>
     <Downloads>
         <Download DeploymentType="DeploymentType1">
-            <PrefetchScript>$URL = ((Invoke-WebRequest "https://www.microsoft.com/en-us/download/confirmation.aspx?id=10056" -UseBasicParsing).Links | Where-Object href -like "*KoduSetup.msi")[0].href</PrefetchScript>
+            <PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/i/InfiniteInstant/KoduGameLab" -InstallerType msi</PrefetchScript>
             <URL></URL>
             <DownloadFileName>KoduSetup.msi</DownloadFileName>
             <DownloadVersionCheck>$Version = ([String](Get-MSIInfo -Path $TempDir\KoduSetup.msi -Property ProductVersion)).TrimStart().TrimEnd()
@@ -61,10 +61,6 @@
 		<Uninstall>False</Uninstall>
 		<CleanupSuperseded>True</CleanupSuperseded>
 		<KeepSuperseded>2</KeepSuperseded>
-	</Supersedence>
-    <Supersedence>
-		<Supersedence>True</Supersedence>
-		<Uninstall>False</Uninstall>
 	</Supersedence>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>

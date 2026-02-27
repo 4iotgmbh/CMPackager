@@ -10,8 +10,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $URL = "https://github.com$((Invoke-WebRequest https://github.com/xibosignage/xibo-dotnetclient/releases/latest -UseBasicParsing | Select -expand links | ? href -like "*win32*"| Sort-Object href -Descending)[0].href.ToString())"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/x/XiboSignage/XiboPlayer" -InstallerType msi</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>XiboPlayer.msi</DownloadFileName>
 			<DownloadVersionCheck>$Version = ([String](Get-MSIInfo $DownloadFile -Property ProductVersion)).Trim()</DownloadVersionCheck>
@@ -51,14 +50,6 @@
 					<InstallBehaviorExe>XiboClientWatchdog.exe</InstallBehaviorExe>
 				</InstallBehaviorProcess>
 			</InstallBehavior>
-			<Dependencies>
-				<DependencyGroup GroupName="Visual Studio Cpp redistributable">
-					<DependencyGroupApp AppName="Visual Studio CPP redist">
-						<DependencyDepType>Silently Install VCRedist</DependencyDepType>
-						<DependencyAutoInstall>True</DependencyAutoInstall>
-					</DependencyGroupApp>
-				</DependencyGroup>
-			</Dependencies>
 		</DeploymentType>
 	</DeploymentTypes>
 	<Distribution>

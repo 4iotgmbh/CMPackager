@@ -1,134 +1,96 @@
 <ApplicationDef>
-	<Application>
-		<Name>FileZilla</Name>
-		<Description>The free FTP solution</Description>
-		<Publisher>FileZilla Project</Publisher>
-		<AutoInstall>True</AutoInstall>
-		<UserDocumentation>https://filezilla-project.org/</UserDocumentation>
-		<Icon>filezilla.png</Icon>
-	</Application>
-	<Downloads>
-		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = Invoke-WebRequest 'https://filezilla-project.org/download.php?show_all=1' -UseBasicParsing -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' | Select-Object -ExpandProperty Links | Where-Object href -like '*win64-setup.exe*' | Select-Object -First 1 -ExpandProperty href</PrefetchScript>
-			<URL></URL>
-			<DownloadFileName>FileZilla-win64-setup.exe</DownloadFileName>
-			<Version></Version>
-			<FullVersion></FullVersion>
-			<DownloadVersionCheck>$Version = (Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion</DownloadVersionCheck>
-			<ExtraCopyFunctions></ExtraCopyFunctions>
-		</Download>
-		<Download DeploymentType="DeploymentType2">
-		<PrefetchScript>$URL = Invoke-WebRequest 'https://filezilla-project.org/download.php?show_all=1' -UseBasicParsing -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' | Select-Object -ExpandProperty Links | Where-Object href -like '*win32-setup.exe*' | Select-Object -First 1 -ExpandProperty href</PrefetchScript>
-			<URL></URL>
-			<DownloadFileName>FileZilla-win32-setup.exe</DownloadFileName>
-			<Version></Version>
-			<FullVersion></FullVersion>
-			<DownloadVersionCheck>$Version = (Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion</DownloadVersionCheck>
-			<ExtraCopyFunctions></ExtraCopyFunctions>
-		</Download>
-	</Downloads>
-	<DeploymentTypes>
-		<DeploymentType Name="DeploymentType1">
-			<DeploymentTypeName>FileZilla win64 setup</DeploymentTypeName>
-			<InstallationType>Script</InstallationType>
-			<CacheContent>False</CacheContent>
-			<BranchCache>True</BranchCache>
-			<ContentFallback>True</ContentFallback>
-			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>FileZilla-win64-setup.exe /S</InstallProgram>
-			<UninstallCmd>`"%ProgramFiles%\FileZilla FTP Client\Uninstall.exe`" /S</UninstallCmd>
-			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
-			<UserInteractionMode>Hidden</UserInteractionMode>
-			<EstRuntimeMins>15</EstRuntimeMins>
-			<MaxRuntimeMins>60</MaxRuntimeMins>
-			<RebootBehavior>BasedOnExitCode</RebootBehavior>
-			<DetectionMethodType>Custom</DetectionMethodType>
-			<CustomDetectionMethods>
-				<DetectionClause>
-					<DetectionClauseType>File</DetectionClauseType>
-					<Name>FileZilla.exe</Name>
-					<Path>%ProgramFiles%\FileZilla FTP Client</Path>
-					<PropertyType>Version</PropertyType>
-					<ExpectedValue>$Version</ExpectedValue>
-					<ExpressionOperator>GreaterEquals</ExpressionOperator>
-					<Value>True</Value>
-				</DetectionClause>
-			</CustomDetectionMethods>
-			<RequirementsRules>
-				<RequirementsRule>
-					<RequirementsRuleType>Existential</RequirementsRuleType>
-					<RequirementsRuleValue>
-						<RuleValue>True</RuleValue>
-					</RequirementsRuleValue>
-					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
-				</RequirementsRule>
-			</RequirementsRules>
-		</DeploymentType>
-		<DeploymentType Name="DeploymentType2">
-			<DeploymentTypeName>FileZilla win32 setup</DeploymentTypeName>
-			<InstallationType>Script</InstallationType>
-			<CacheContent>False</CacheContent>
-			<BranchCache>True</BranchCache>
-			<ContentFallback>True</ContentFallback>
-			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>FileZilla-win32-setup.exe /S</InstallProgram>
-			<UninstallCmd>`"%ProgramFiles(x86)%\FileZilla FTP Client\Uninstall.exe`" /S</UninstallCmd>
-			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
-			<UserInteractionMode>Hidden</UserInteractionMode>
-			<EstRuntimeMins>15</EstRuntimeMins>
-			<MaxRuntimeMins>60</MaxRuntimeMins>
-			<RebootBehavior>BasedOnExitCode</RebootBehavior>
-			<DetectionMethodType>Custom</DetectionMethodType>
-			<CustomDetectionMethods>
-				<DetectionClause>
-					<DetectionClauseType>File</DetectionClauseType>
-					<Name>FileZilla.exe</Name>
-					<Path>%ProgramFiles(x86)%\FileZilla FTP Client</Path>
-					<PropertyType>Version</PropertyType>
-					<ExpectedValue>$Version</ExpectedValue>
-					<ExpressionOperator>GreaterEquals</ExpressionOperator>
-					<Value>True</Value>
-				</DetectionClause>
-			</CustomDetectionMethods>
-			<RequirementsRules>
-				<RequirementsRule>
-					<RequirementsRuleType>Existential</RequirementsRuleType>
-					<RequirementsRuleValue>
-						<RuleValue>False</RuleValue>
-					</RequirementsRuleValue>
-					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
-				</RequirementsRule>
-			</RequirementsRules>
-		</DeploymentType>
-	</DeploymentTypes>
-	<Distribution>
-		<DistributeContent>True</DistributeContent>
-	</Distribution>
-	<Supersedence>
-		<Supersedence>True</Supersedence>
-		<Uninstall>False</Uninstall>
-		<CleanupSuperseded>True</CleanupSuperseded>
-		<KeepSuperseded>2</KeepSuperseded>
-	</Supersedence>
-	<Deployment>
-		<DeploySoftware>True</DeploySoftware>
-		<Purpose>Required</Purpose>
-		<DeploymentCollection>FileZilla-Test</DeploymentCollection>
-	</Deployment>
-	<Deployment>
-		<DeploySoftware>True</DeploySoftware>
-		<Purpose>Required</Purpose>
-		<AvailableOffset>7.00:00:00</AvailableOffset>
-		<DeadlineOffset>14.00:00:00</DeadlineOffset>
-		<DeploymentCollection>FileZilla-Pilot</DeploymentCollection>
-	</Deployment>
-	<Deployment>
-		<DeploySoftware>True</DeploySoftware>
-		<Purpose>Required</Purpose>
-		<AvailableOffset>14.00:00:00</AvailableOffset>
-		<DeadlineOffset>28.00:00:00</DeadlineOffset>
-		<DeploymentCollection>FileZilla-General Availability</DeploymentCollection>
-	</Deployment>
+  <Application>
+    <Name>FileZilla</Name>
+    <Description>The free FTP solution</Description>
+    <Publisher>FileZilla Project</Publisher>
+    <AutoInstall>True</AutoInstall>
+    <UserDocumentation>https://filezilla-project.org/</UserDocumentation>
+    <Icon>filezilla.png</Icon>
+  </Application>
+  <Downloads>
+    <Download DeploymentType="DeploymentType1">
+      <PrefetchScript>$json = Invoke-RestMethod 'https://sourceforge.net/projects/filezilla/best_release.json'
+											try { $a = Invoke-WebRequest $json.platform_releases.windows.url -MaximumRedirection 0 -ErrorAction SilentlyContinue } catch { $URL = $a.Headers['Location'] }
+											$RedirectURL = $a.Headers['Location']
+											$URL = $(invoke-webrequest $RedirectURL | select -expand links).'data-release-url'
+			</PrefetchScript>
+      <URL>
+      </URL>
+      <DownloadFileName>FileZilla-win64-setup.exe</DownloadFileName>
+      <Version>
+      </Version>
+      <FullVersion>
+      </FullVersion>
+      <DownloadVersionCheck>$Version = (Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion</DownloadVersionCheck>
+      <ExtraCopyFunctions>
+      </ExtraCopyFunctions>
+    </Download>
+  </Downloads>
+  <DeploymentTypes>
+    <DeploymentType Name="DeploymentType1">
+      <DeploymentTypeName>FileZilla win64 setup</DeploymentTypeName>
+      <InstallationType>Script</InstallationType>
+      <CacheContent>False</CacheContent>
+      <BranchCache>True</BranchCache>
+      <ContentFallback>True</ContentFallback>
+      <OnSlowNetwork>Download</OnSlowNetwork>
+      <InstallProgram>FileZilla-win64-setup.exe /S</InstallProgram>
+      <UninstallCmd>`"%ProgramFiles%\FileZilla FTP Client\Uninstall.exe`" /S</UninstallCmd>
+      <InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
+      <LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
+      <UserInteractionMode>Hidden</UserInteractionMode>
+      <EstRuntimeMins>15</EstRuntimeMins>
+      <MaxRuntimeMins>60</MaxRuntimeMins>
+      <RebootBehavior>BasedOnExitCode</RebootBehavior>
+      <DetectionMethodType>Custom</DetectionMethodType>
+      <CustomDetectionMethods>
+        <DetectionClause>
+          <DetectionClauseType>File</DetectionClauseType>
+          <Name>FileZilla.exe</Name>
+          <Path>%ProgramFiles%\FileZilla FTP Client</Path>
+          <PropertyType>Version</PropertyType>
+          <ExpectedValue>$Version</ExpectedValue>
+          <ExpressionOperator>GreaterEquals</ExpressionOperator>
+          <Value>True</Value>
+        </DetectionClause>
+      </CustomDetectionMethods>
+      <RequirementsRules>
+        <RequirementsRule>
+          <RequirementsRuleType>Existential</RequirementsRuleType>
+          <RequirementsRuleValue>
+            <RuleValue>True</RuleValue>
+          </RequirementsRuleValue>
+          <RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
+        </RequirementsRule>
+      </RequirementsRules>
+    </DeploymentType>
+  </DeploymentTypes>
+  <Distribution>
+    <DistributeContent>True</DistributeContent>
+  </Distribution>
+  <Supersedence>
+    <Supersedence>True</Supersedence>
+    <Uninstall>False</Uninstall>
+    <CleanupSuperseded>True</CleanupSuperseded>
+    <KeepSuperseded>2</KeepSuperseded>
+  </Supersedence>
+  <Deployment>
+    <DeploySoftware>True</DeploySoftware>
+    <Purpose>Required</Purpose>
+    <DeploymentCollection>FileZilla-Test</DeploymentCollection>
+  </Deployment>
+  <Deployment>
+    <DeploySoftware>True</DeploySoftware>
+    <Purpose>Required</Purpose>
+    <AvailableOffset>7.00:00:00</AvailableOffset>
+    <DeadlineOffset>14.00:00:00</DeadlineOffset>
+    <DeploymentCollection>FileZilla-Pilot</DeploymentCollection>
+  </Deployment>
+  <Deployment>
+    <DeploySoftware>True</DeploySoftware>
+    <Purpose>Required</Purpose>
+    <AvailableOffset>14.00:00:00</AvailableOffset>
+    <DeadlineOffset>28.00:00:00</DeadlineOffset>
+    <DeploymentCollection>FileZilla-General Availability</DeploymentCollection>
+  </Deployment>
 </ApplicationDef>

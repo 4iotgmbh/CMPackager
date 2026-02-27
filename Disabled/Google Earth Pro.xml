@@ -9,7 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = ((Invoke-WebRequest -Uri https://support.google.com/earth/answer/168344 -UseBasicParsing).links | where href -like "*-x64.exe" | sort href -Descending)[0].href</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/g/Google/EarthPro" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>GoogleEarthProInstallerx64.exe</DownloadFileName>
 			<DownloadVersionCheck>Start-Process $TempDir\GoogleEarthProInstallerx64.exe -ArgumentList "OMAHA=1" -wait

@@ -45,6 +45,7 @@ The script processes each recipe XML file through a sequential pipeline (see MAI
 ### Recipe System
 
 Recipes are XML files following the schema in `Disabled/_RecipeSchema.xsd`. Each recipe defines:
+
 - **`<Application>`** — App metadata (name, publisher, icon, etc.)
 - **`<Downloads>`** — Download sources with version checking; each `<Download>` is linked to a DeploymentType by the `DeploymentType` attribute
 - **`<DeploymentTypes>`** — Install commands, detection methods (Registry, File, MSI), requirements rules, dependencies
@@ -79,7 +80,7 @@ CMPackager includes tools to leverage the Windows Package Manager (WinGet) repos
 
 **Dynamic URL Functions in CMPackager.ps1**:
 
-- **`Get-InstallerURLfromWinget`** ([CMPackager.ps1:301](CMPackager.ps1#L301)) — Queries GitHub API for WinGet package manifests, parses the latest version's installer YAML, and returns the installer download URL. Parameters: `-apiUrl` (required), `-InstallerType` (`msi` or `exe`, required), `-Architecture` (`x64`, `x86`, `arm64`, `arm`, optional), `-Scope` (`machine` or `user`, optional). When multiple installers exist in the manifest, Architecture and Scope narrow the selection.
+- **`Get-InstallerURLfromWinget`** ([CMPackager.ps1:301](CMPackager.ps1#L301)) — Queries GitHub API for WinGet package manifests, parses the latest version's installer YAML, and returns the installer download URL. Parameters: `-apiUrl` (required), `-InstallerType` (`msi`, `exe`, or `zip`, required), `-Architecture` (`x64`, `x86`, `arm64`, `arm`, optional), `-Scope` (`machine` or `user`, optional). When multiple installers exist in the manifest, Architecture and Scope narrow the selection. For `-InstallerType zip`, returns a `PSCustomObject` with `.Url` (the zip download URL) and `.NestedFilePath` (the `RelativeFilePath` of the nested installer inside the zip); for `msi`/`exe`, returns a plain string URL.
 
 These functions are called within recipe `<PrefetchScript>` blocks to dynamically fetch current download URLs at runtime:
 

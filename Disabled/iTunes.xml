@@ -9,7 +9,8 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<URL>https://www.apple.com/itunes/download/win64</URL>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/a/Apple/iTunes" -InstallerType exe -Architecture x64</PrefetchScript>
+			<URL></URL>
 			<DownloadFileName>iTunesSetup64.exe</DownloadFileName>
 			<DownloadVersionCheck>&amp; $ScriptRoot\7za.exe x "$TempDir\iTunesSetup64.exe" -o"$TempDir\iTunesTempx64" -y
 			$Version = (get-item $TempDir\iTunesSetup64.exe).VersionInfo.ProductVersion
@@ -21,7 +22,8 @@
 			Copy-Item $TempDir\iTunesTempx64\* -Destination $DestinationPath -Recurse -Force</ExtraCopyFunctions>
 		</Download>
 		<Download DeploymentType="DeploymentType2">
-			<URL>https://www.apple.com/itunes/download/win32</URL>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/a/Apple/iTunes" -InstallerType exe -Architecture x86</PrefetchScript>
+			<URL></URL>
 			<DownloadFileName>iTunesSetup.exe</DownloadFileName>
 			<DownloadVersionCheck>&amp; $ScriptRoot\7za.exe x "$TempDir\iTunesSetup.exe" -o"$TempDir\iTunesTempx86" -y
 			$Version = (get-item $TempDir\iTunesSetup.exe).VersionInfo.ProductVersion

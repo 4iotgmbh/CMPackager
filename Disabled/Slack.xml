@@ -9,8 +9,8 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript></PrefetchScript>
-			<URL>https://slack-ssb-updates.global.ssl.fastly.net/releases_x64/SlackSetup.msi</URL>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/s/SlackTechnologies/Slack" -InstallerType msi -Architecture x64 -Scope machine</PrefetchScript>
+			<URL></URL>
 			<Version></Version>
 			<FullVersion></FullVersion>
 			<DownloadFileName>SlackSetup.msi</DownloadFileName>

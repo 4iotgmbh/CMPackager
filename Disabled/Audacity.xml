@@ -6,20 +6,10 @@
 		<AutoInstall>True</AutoInstall>
 		<UserDocumentation>https://www.audacityteam.org/</UserDocumentation>
 		<Icon>Audacity.png</Icon>
-		<FolderPath>Audacity</FolderPath>
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>
-			$Releases = 'https://fossies.org/windows/misc/'
-			$Filename = (Invoke-WebRequest -Uri $Releases -UseBasicParsing).Links | Where-Object -Property href -Match 'audacity-win-.*.exe$' | Select-Object -First 1 -expand href
-			[String]$Download.Version = $Filename -split '-|.exe' | select -Skip 2 -First 1
-			$URL = $Releases + $Filename
-			$HTTPheaders = @{
-				'Referer'    = $Releases;
-				'User-Agent' = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36'
-			}
-			</PrefetchScript>
+						<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/a/Audacity/Audacity" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>Audacity.exe</DownloadFileName>
 			<Version></Version>

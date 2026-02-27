@@ -9,7 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = $(get-EvergreenApp JabraDirect).uri</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/j/Jabra/Direct" -InstallerType burn -Architecture x86</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>JabraDirectSetup.exe</DownloadFileName>
 			<Version></Version>

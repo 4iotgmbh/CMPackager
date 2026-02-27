@@ -9,8 +9,8 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript></PrefetchScript>
-			<URL>https://zoom.us/client/latest/ZoomInstallerFull.msi</URL>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/z/Zoom/Zoom" -InstallerType msi -Architecture x64</PrefetchScript>
+			<URL></URL>
 			<DownloadFileName>ZoomInstallerFull.msi</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>

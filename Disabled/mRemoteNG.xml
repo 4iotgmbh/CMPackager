@@ -10,8 +10,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $URL = "https://github.com$((Invoke-WebRequest https://github.com/mRemoteNG/mRemoteNG/releases/latest -UseBasicParsing | Select -expand links | ? href -like "*.msi").href.ToString())"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/mRemoteNG/mRemoteNG" -InstallerType msi -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>mRemoteNG.msi</DownloadFileName>
 			<DownloadVersionCheck>$Version = ([String](Get-MSIInfo $DownloadFile -Property ProductVersion)).Trim()</DownloadVersionCheck>

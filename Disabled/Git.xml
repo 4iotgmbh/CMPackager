@@ -9,32 +9,13 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = (((Invoke-WebRequest https://git-scm.com/download/win).Links) | where -Property OuterText -EQ "64-bit Git for Windows Setup").href
-			$Download.Version = if ($URL -replace '\.windows' -match "\d+\.\d+\.\d+(\.\d+)?") {$matches[0]}
-			[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-			write-output $URL</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/g/Git/Git" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>Git-x64.exe</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
 			<DownloadVersionCheck>$Version = ((Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<AppRepoFolder>x64</AppRepoFolder>
-			<ExtraCopyFunctions>if (Test-Path $ScriptRoot\ExtraFiles\git.inf) {
-			Copy-Item -Path $ScriptRoot\ExtraFiles\git.inf -Destination $DestinationPath
-			$AssociatedDeploymentType = $Recipe.ApplicationDef.DeploymentTypes.DeploymentType | Where-Object Name -eq $Download.DeploymentType
-			$AssociatedDeploymentType.InstallProgram += ' /LOADINF="git.inf"'
-			}</ExtraCopyFunctions>
-		</Download>
-		<Download DeploymentType="DeploymentType2">
-			<PrefetchScript>$URL = (((Invoke-WebRequest https://git-scm.com/download/win).Links) | where -Property OuterText -EQ "32-bit Git for Windows Setup").href
-			$Download.Version = if ($URL -replace '\.windows' -match "\d+\.\d+\.\d+(\.\d+)?") {$matches[0]}
-			</PrefetchScript>
-			<URL></URL>
-			<DownloadFileName>Git-x86.exe</DownloadFileName>
-			<Version></Version>
-			<FullVersion></FullVersion>
-			<DownloadVersionCheck>$Version = ((Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
-			<AppRepoFolder>x86</AppRepoFolder>
 			<ExtraCopyFunctions>if (Test-Path $ScriptRoot\ExtraFiles\git.inf) {
 			Copy-Item -Path $ScriptRoot\ExtraFiles\git.inf -Destination $DestinationPath
 			$AssociatedDeploymentType = $Recipe.ApplicationDef.DeploymentTypes.DeploymentType | Where-Object Name -eq $Download.DeploymentType
@@ -91,46 +72,6 @@
 					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
 				</RequirementsRule>
 			</RequirementsRules>
-		</DeploymentType>
-		<DeploymentType Name="DeploymentType2">
-			<DeploymentTypeName>Git x86</DeploymentTypeName>
-			<InstallationType>Script</InstallationType>
-			<CacheContent>False</CacheContent>
-			<BranchCache>True</BranchCache>
-			<ContentFallback>True</ContentFallback>
-			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>Git-x86.exe /VERYSILENT /NORESTART</InstallProgram>
-			<UninstallCmd>"%ProgramFiles(x86)%\Git\unins000.exe" /VERYSILENT</UninstallCmd>
-			<UninstallOption>NoneRequired</UninstallOption>
-			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
-			<UserInteractionMode>Hidden</UserInteractionMode>
-			<EstRuntimeMins>10</EstRuntimeMins>
-			<MaxRuntimeMins>30</MaxRuntimeMins>
-			<RebootBehavior>BasedOnExitCode</RebootBehavior>
-			<DetectionMethodType>Custom</DetectionMethodType>
-			<CustomDetectionMethods>
-				<DetectionClause>
-					<DetectionClauseType>File</DetectionClauseType>
-					<Name>git-cmd.exe</Name>
-					<Path>%ProgramFiles(x86)%\Git\</Path>
-					<PropertyType>Version</PropertyType>
-					<ExpectedValue>$Version</ExpectedValue>
-					<ExpressionOperator>GreaterEquals</ExpressionOperator>
-					<Value>True</Value>
-				</DetectionClause>
-			</CustomDetectionMethods>
-			<InstallBehavior>
-				<InstallBehaviorProcess DisplayName="git">
-					<InstallBehaviorExe>git.exe</InstallBehaviorExe>
-				</InstallBehaviorProcess>
-				<InstallBehaviorProcess DisplayName="git bash">
-					<InstallBehaviorExe>git-bash.exe</InstallBehaviorExe>
-				</InstallBehaviorProcess>
-				<InstallBehaviorProcess DisplayName="git cmd">
-					<InstallBehaviorExe>git-cmd.exe</InstallBehaviorExe>
-				</InstallBehaviorProcess>
-			</InstallBehavior>
 		</DeploymentType>
 	</DeploymentTypes>
 	<Distribution>

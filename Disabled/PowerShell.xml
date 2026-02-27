@@ -9,10 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$v = (Invoke-RestMethod https://aka.ms/pwsh-buildinfo-stable).ReleaseTag -replace '^v'
-			$download.version = $v + '.0'
-			$url = 'https://github.com/PowerShell/PowerShell/releases/download/v{0}/PowerShell-{0}-win-x64.msi' -f $v
-			</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/PowerShell" -InstallerType msi -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>PowerShell.msi</DownloadFileName>
 			<Version></Version>

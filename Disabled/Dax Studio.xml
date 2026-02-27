@@ -9,8 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-			$URL = "https://github.com$((Invoke-WebRequest https://github.com/DaxStudio/DaxStudio/releases/latest -UseBasicParsing |Select -ExpandProperty Links |where -Property href -like "*_setup.exe")[0].href)"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/d/DaxStudio/DaxStudio" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>DaxStudioSetup.exe</DownloadFileName>
 			<Version></Version>

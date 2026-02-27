@@ -1,42 +1,45 @@
 <ApplicationDef>
 	<Application>
-		<Name>Wireshark</Name>
-		<Description>Wireshark is the world's foremost network protocol analyzer. It lets you see what's happening on your network at a microscopic level. It is the de facto (and often de jure) standard across many industries and educational institutions. Free and Open source Software</Description>
-		<Publisher>Wireshark Foundation</Publisher>
+		<Name>TortoiseSVN</Name>
+		<Description>TortoiseSVN is a really easy to use Revision control / version control / source control software for Windows. It is based on Apache Subversion (SVN); TortoiseSVN provides a nice and easy user interface for Subversion.</Description>
+		<Publisher>Tortoise</Publisher>
 		<AutoInstall>True</AutoInstall>
-		<UserDocumentation>https://www.wireshark.org/</UserDocumentation>
-		<Icon>wireshark.ico</Icon>
+		<UserDocumentation>https://tortoisesvn.net/support.html</UserDocumentation>
+		<Icon>TortoiseSVN.png</Icon>
 	</Application>
-	<Downloads>
-		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/w/WiresharkFoundation/Wireshark" -InstallerType wix -Architecture x64</PrefetchScript>
-			<URL></URL>
-			<DownloadFileName>Wireshark.msi</DownloadFileName>
-			<Version></Version>
-			<FullVersion></FullVersion>
-			<DownloadVersionCheck>$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()
-			$Version = ($version.Split('.'))[0..2] -join "."</DownloadVersionCheck>
-			<ExtraCopyFunctions>Copy-Item $ScriptRoot\ExtraFiles\Wireshark\* -Destination $DestinationPath -recurse -force</ExtraCopyFunctions>
-		</Download>
-	</Downloads>
+		<Downloads>
+			<Download DeploymentType="DeploymentType1">
+				<PrefetchScript>$sfUrl = (Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/t/TortoiseSVN/TortoiseSVN" -InstallerType msi -Architecture x64) + "/download"
+				try { $a = Invoke-WebRequest $sfUrl -MaximumRedirection 0 -ErrorAction SilentlyContinue } catch { $URL = $a.Headers['Location'] }
+				$RedirectURL = $a.Headers['Location']
+				$URL = $(Invoke-WebRequest $RedirectURL | Select-Object -ExpandProperty links).'data-release-url'</PrefetchScript>
+				<URL></URL>
+				<DownloadFileName>TortoiseSVN.msi</DownloadFileName>
+				<Version></Version>
+				<FullVersion></FullVersion>
+				<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()
+				$Version = ($version.Split('.'))[0..1] -join "."</DownloadVersionCheck>
+				<ExtraCopyFunctions></ExtraCopyFunctions>
+			</Download>
+		</Downloads>
 	<DeploymentTypes>
 		<DeploymentType Name="DeploymentType1">
-			<DeploymentTypeName>WireShark Silent Install x64</DeploymentTypeName>
+			<DeploymentTypeName>TortoiseSVN Silent Install x64</DeploymentTypeName>
 			<InstallationType>MSI</InstallationType>
-			<Comments>Silent Installer for WireShark</Comments>
+			<Comments>Silent Installer for TortoiseSVN</Comments>
 			<Language>English</Language>
 			<CacheContent>False</CacheContent>
 			<BranchCache>True</BranchCache>
 			<ContentFallback>True</ContentFallback>
 			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>powershell -executionpolicy bypass .\install.ps1</InstallProgram>
-			<InstallationMSI>Wireshark.msi</InstallationMSI>
+			<InstallationMSI>TortoiseSVN.msi</InstallationMSI>
+			<UninstallCmd></UninstallCmd>
 			<Force32bit>False</Force32bit>
 			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
 			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
 			<UserInteractionMode>Hidden</UserInteractionMode>
 			<ReqUserInteraction>False</ReqUserInteraction>
-			<EstRuntimeMins>10</EstRuntimeMins>
+			<EstRuntimeMins>15</EstRuntimeMins>
 			<MaxRuntimeMins>30</MaxRuntimeMins>
 			<RebootBehavior>BasedOnExitCode</RebootBehavior>
 			<DetectionMethodType>MSI</DetectionMethodType>
@@ -63,20 +66,20 @@
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
-		<DeploymentCollection>Wireshark-Test</DeploymentCollection>
+		<DeploymentCollection>TortoiseSVN-Test</DeploymentCollection>
 	</Deployment>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
 		<AvailableOffset>7.00:00:00</AvailableOffset>
 		<DeadlineOffset>14.00:00:00</DeadlineOffset>
-		<DeploymentCollection>Wireshark-Pilot</DeploymentCollection>
+		<DeploymentCollection>TortoiseSVN-Pilot</DeploymentCollection>
 	</Deployment>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
 		<AvailableOffset>14.00:00:00</AvailableOffset>
 		<DeadlineOffset>28.00:00:00</DeadlineOffset>
-		<DeploymentCollection>Wireshark-General Availability</DeploymentCollection>
+		<DeploymentCollection>TortoiseSVN-General Availability</DeploymentCollection>
 	</Deployment>
 </ApplicationDef>

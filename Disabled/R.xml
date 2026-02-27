@@ -9,7 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = "https://cloud.r-project.org//bin/windows/base/$((Invoke-WebRequest https://cloud.r-project.org/bin/windows/base/ | Select -ExpandProperty Links | Where innerText -like "Download R*for Windows")[0].href)"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/r/RProject/R" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>RInstall.exe</DownloadFileName>
 			<DownloadVersionCheck>

@@ -9,24 +9,11 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = "$(((Invoke-Webrequest -uri "https://www.opera.com/download/get/?partner=www&amp;opsys=Windows&amp;arch=x64").links | where outerText -eq "try again").href)"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/o/Opera/Opera" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>Opera_x64.exe</DownloadFileName>
-			<DownloadVersionCheck>&amp; $ScriptRoot\7za.exe x "$TempDir\Opera_x64.exe" -o"$TempDir\Opera_x64Temp" -y
-			$Version = (get-item $TempDir\Opera_x64Temp\Opera.exe).VersionInfo.ProductVersion
-			$FullVersion = (get-item $TempDir\Opera_x64Temp\Opera.exe).VersionInfo.ProductVersion
-			</DownloadVersionCheck>
-			<FullVersion></FullVersion>
-			<Version></Version>
-		</Download>
-		<Download DeploymentType="DeploymentType2">
-			<PrefetchScript>$URL = "$(((Invoke-Webrequest -uri "https://www.opera.com/download/get/?partner=www&amp;opsys=Windows&amp;arch=x64").links | where outerText -eq "try again").href)"</PrefetchScript>
-			<URL></URL>
-			<DownloadFileName>Opera_x86.exe</DownloadFileName>
-			<DownloadVersionCheck>&amp; $ScriptRoot\7za.exe x "$TempDir\Opera_x86.exe" -o"$TempDir\Opera_x86Temp" -y
-			$Version = (get-item $TempDir\Opera_x86Temp\Opera.exe).VersionInfo.ProductVersion
-			$FullVersion = (get-item $TempDir\Opera_x86Temp\Opera.exe).VersionInfo.ProductVersion
-			</DownloadVersionCheck>
+			<DownloadVersionCheck>$FullVersion = ((Get-Item $TempDir\$DownloadFileName).VersionInfo.FileVersion).TrimStart().TrimEnd()
+			$Version = $FullVersion</DownloadVersionCheck>
 			<FullVersion></FullVersion>
 			<Version></Version>
 		</Download>
@@ -69,38 +56,6 @@
 					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
 				</RequirementsRule>
 			</RequirementsRules>
-		</DeploymentType>
-		<DeploymentType Name="DeploymentType2">
-			<DeploymentTypeName>Opera Browser x86 Silent Install</DeploymentTypeName>
-			<InstallationType>Script</InstallationType>
-			<CacheContent>False</CacheContent>
-			<BranchCache>True</BranchCache>
-			<ContentFallback>True</ContentFallback>
-			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>Opera_x86.exe /silent /norestart /allusers=yes /desktopshortcut=no /launchopera=no /installfolder="%ProgramFiles(x86)%\Opera"</InstallProgram>
-			<UninstallCmd>`"%ProgramFiles(x86)%\Opera\Launcher.exe`" /uninstall /silent</UninstallCmd>
-			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
-			<UserInteractionMode>Hidden</UserInteractionMode>
-			<EstRuntimeMins>5</EstRuntimeMins>
-			<MaxRuntimeMins>20</MaxRuntimeMins>
-			<RebootBehavior>BasedOnExitCode</RebootBehavior>
-			<DetectionMethodType>Custom</DetectionMethodType>
-			<CustomDetectionMethods>
-				<DetectionClause>
-					<DetectionClauseType>File</DetectionClauseType>
-					<Name>Launcher.exe</Name>
-					<Path>%ProgramFiles(x86)%\Opera</Path>
-					<PropertyType>Version</PropertyType>
-					<ExpectedValue>$FullVersion</ExpectedValue>
-					<ExpressionOperator>IsEquals</ExpressionOperator>
-					<Value>True</Value>
-					<Is64Bit>False</Is64Bit>
-				</DetectionClause>
-			</CustomDetectionMethods>
-			<Requirements>
-				<RuleName>OS Architecture x86</RuleName>
-			</Requirements>
 		</DeploymentType>
 	</DeploymentTypes>
 	<Distribution>

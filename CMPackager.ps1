@@ -307,7 +307,7 @@ function Get-InstallerURLfromWinget {
     [string]$apiUrl,
 
     [parameter(Mandatory = $true)]
-    [ValidateSet("msi", "exe")]
+    [ValidateSet("msi", "exe", "zip", "burn", "wix")]
     [string]$InstallerType,
 
     [parameter(Mandatory = $false)]
@@ -322,6 +322,9 @@ function Get-InstallerURLfromWinget {
   # Method: Query the winget (Windows Package Manager) manifest from GitHub
   # This is publicly accessible, machine-readable, and always up to date.
   # Use -Architecture and -Scope to select among multiple installers in the manifest.
+
+  # Map installer types that share a file extension with another type
+  $fileExtension = switch ($InstallerType) { "burn" { "exe" } "wix" { "msi" } default { $InstallerType } }
 
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -381,8 +384,16 @@ function Get-InstallerURLfromWinget {
 
           # Fall back to full YAML if parsing yielded nothing
           if ($installerBlocks.Count -eq 0) {
-              $urlMatch = [regex]::Match($yamlContent, "(?i)InstallerUrl:\s*(https://[^\s]+\.$InstallerType)")
-              if ($urlMatch.Success) { $urlMatch.Groups[1].Value }
+              $urlMatch = [regex]::Match($yamlContent, "(?i)InstallerUrl:\s*(https://[^\s]+\.$fileExtension(?:/download)?)")
+              if ($urlMatch.Success) {
+                  if ($InstallerType -eq "zip") {
+                      $nestedMatch = [regex]::Match($yamlContent, "(?i)RelativeFilePath:\s*(.+)")
+                      $nestedPath = if ($nestedMatch.Success) { $nestedMatch.Groups[1].Value.Trim() } else { $null }
+                      [PSCustomObject]@{ Url = $urlMatch.Groups[1].Value; NestedFilePath = $nestedPath }
+                  } else {
+                      $urlMatch.Groups[1].Value
+                  }
+              }
               else { Write-Warning "Could not parse $InstallerType URL from installer manifest." }
               return
           }
@@ -402,12 +413,22 @@ function Get-InstallerURLfromWinget {
               else { Write-Warning "No installer found for Scope '$Scope', trying all filtered entries." }
           }
 
+          # Filter by InstallerType if blocks declare it explicitly (handles per-installer InstallerType)
+          $typeFiltered = $filtered | Where-Object { $_ -match "(?i)InstallerType:\s*$InstallerType\b" }
+          if ($typeFiltered) { $filtered = $typeFiltered }
+
           $targetBlock = $filtered | Select-Object -First 1
 
           if ($targetBlock) {
-              $urlMatch = [regex]::Match($targetBlock, "(?i)InstallerUrl:\s*(https://[^\s]+\.$InstallerType)")
+              $urlMatch = [regex]::Match($targetBlock, "(?i)InstallerUrl:\s*(https://[^\s]+\.$fileExtension(?:/download)?)")
               if ($urlMatch.Success) {
-                  $urlMatch.Groups[1].Value
+                  if ($InstallerType -eq "zip") {
+                      $nestedMatch = [regex]::Match($targetBlock, "(?i)RelativeFilePath:\s*(.+)")
+                      $nestedPath = if ($nestedMatch.Success) { $nestedMatch.Groups[1].Value.Trim() } else { $null }
+                      [PSCustomObject]@{ Url = $urlMatch.Groups[1].Value; NestedFilePath = $nestedPath }
+                  } else {
+                      $urlMatch.Groups[1].Value
+                  }
               } else {
                   Write-Warning "Could not parse $InstallerType URL from installer manifest."
                   Write-Verbose $targetBlock

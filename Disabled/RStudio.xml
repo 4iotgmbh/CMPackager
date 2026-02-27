@@ -9,15 +9,11 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>
-			[xml]$RStudioDLs = (Invoke-WebRequest https://download1.rstudio.org/).Content
-			"$LatestDL = ($RStudioDLs.ListBucketResult.Contents | where Key -notlike "*pro*" | where Key -like "*.exe" | sort -Property lastModified -Descending)[0].key"
-			$URL = "https://download1.rstudio.org/$LatestDL"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/p/Posit/RStudio" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>RStudioSetup.exe</DownloadFileName>
 			<DownloadVersionCheck>
-			$FullVersion = (Get-ExtensionAttribute -FullName $DownloadFile -ExtensionAttribute ProductVersion).ProductVersion
-			$Version = ($FullVersion.split('.'))[0..2] -join '.'
+					$Version = [string]$(Get-item $TempDir\$DownloadFileName).VersionInfo.ProductVersionRaw
 			</DownloadVersionCheck>
 			<FullVersion></FullVersion>
 			<Version></Version>
@@ -47,7 +43,7 @@
 					<Name>RStudio.exe</Name>
 					<Path>%ProgramFiles%\RStudio\bin</Path>
 					<PropertyType>Version</PropertyType>
-					<ExpectedValue>$FullVersion</ExpectedValue>
+					<ExpectedValue>$Version</ExpectedValue>
 					<ExpressionOperator>IsEquals</ExpressionOperator>
 					<Value>True</Value>
 				</DetectionClause>

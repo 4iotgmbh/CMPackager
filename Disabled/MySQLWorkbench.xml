@@ -9,10 +9,7 @@
 	</Application>
 		<Downloads>
 			<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$MySQL = Invoke-WebRequest "https://dev.mysql.com/downloads/workbench/"
-							$MySQL = Invoke-WebRequest "https://dev.mysql.com$(($MySQL.Links | where {$_.href -like "*downloads/file*" -and $_.outerText -eq "Download"})[0].href)"
-							$URL = "https://dev.mysql.com$(($MySQL.Links | where outerText -eq "No thanks, just start my download.")[0].href)"
-			</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/o/Oracle/MySQLWorkbench" -InstallerType msi -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>mysql-workbench.msi</DownloadFileName>
 			<Version></Version>

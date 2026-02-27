@@ -1,6 +1,6 @@
 <ApplicationDef>
 	<Application>
-		<Name>Royal TS</Name>
+		<Name>Royal TS 7</Name>
 		<Description>Royal TS provides powerful, easy and secure access to your remote systems. It's the perfect tool for server admins, system engineers, developers and IT focused information workers who constantly need to access remote systems with different protocols (like RDP, VNC, SSH, HTTP/S, and many more.)</Description>
 		<Publisher>Royal Applications</Publisher>
 		<AutoInstall>True</AutoInstall>
@@ -9,22 +9,18 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$LinkPath = ((Invoke-WebRequest https://www.royalapps.com/ts/ios/download) | Select-Object -ExpandProperty Links | Where-Object -Property HREF -Like "https://download.royalapplications.com/RoyalTS/RoyalTSInstaller_*").href
-			$URL = $LinkPath</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/r/RoyalApps/RoyalTS/7" -InstallerType wix -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>royalts.msi</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
-			<DownloadVersionCheck>#Script for checking the File Version
-			$DownloadFileName = $LinkPath -split "/" | Select-Object -Last 1
-			$MSIVersion = $DownloadFileName -split "_" | Select-Object -Last 1
-			$Version = $MSIVersion -replace ".{4}$"</DownloadVersionCheck>
+			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<ExtraCopyFunctions></ExtraCopyFunctions>
 		</Download>
 	</Downloads>
 	<DeploymentTypes>
 		<DeploymentType Name="DeploymentType1">
-			<DeploymentTypeName>Royal TS 5 Silent Install</DeploymentTypeName>
+			<DeploymentTypeName>Royal TS 7 Silent Install</DeploymentTypeName>
 			<InstallationType>MSI</InstallationType>
 			<Comments>Silent Installer for Royal TS</Comments>
 			<Language>English</Language>

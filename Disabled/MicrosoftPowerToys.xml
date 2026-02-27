@@ -9,26 +9,18 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$LinkPath = ((Invoke-WebRequest https://github.com/microsoft/PowerToys/releases/latest -UseBasicParsing)| Select-Object -ExpandProperty Links | Where-Object -Property href -Like "*PowerToysSetup-*-x64.exe").href
-			$Download.Version = $LinkPath -replace '.*download/v' -replace '/PowerToysSetup.*$'
-			$Version = $Download.Version
-			$FullVersion = $Download.Version
-			$URL = "https://github.com$LinkPath"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/PowerToys" -InstallerType burn -Architecture x64 -scope machine</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>PowerToysSetup.exe</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
-			<DownloadVersionCheck></DownloadVersionCheck>
-			<ExtraCopyFunctions>pushd $DestinationPath
-			Start-Process .\PowerToysSetup.exe -ArgumentList '--extract_msi' -Wait
-			Move-Item .\PowerToysBootstrappedInstaller*.msi PowerToysSetup.msi
-			Remove-Item .\PowerToysSetup.exe
-			popd</ExtraCopyFunctions>
+			<DownloadVersionCheck>$Version = ((Get-Item $TempDir\$DownloadFileName).VersionInfo.FileVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
+			<ExtraCopyFunctions></ExtraCopyFunctions>
 		</Download>
 		</Downloads>
 	<DeploymentTypes>
 		<DeploymentType Name="DeploymentType1">
-			<DeploymentTypeName>PowerToys x64 msi</DeploymentTypeName>
+			<DeploymentTypeName>PowerToys x64</DeploymentTypeName>
 			<InstallationType>Script</InstallationType>
 			<Comments>Silent Installer for PowerToys</Comments>
 			<Language>English</Language>
@@ -36,9 +28,9 @@
 			<BranchCache>True</BranchCache>
 			<ContentFallback>True</ContentFallback>
 			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallationMSI>PowerToysSetup.msi</InstallationMSI>
-			<InstallProgram>msiexec.exe /i PowerToysSetup.msi /qn /norestart /l*v install.log</InstallProgram>
-			<UninstallCmd>msiexec.exe /x PowerToysSetup.msi /q /qn /norestart /l*v uninstall.log</UninstallCmd>
+			<InstallationMSI>PowerToysSetup.exe</InstallationMSI>
+			<InstallProgram>PowerToysSetup.exe /install /quiet /norestart</InstallProgram>
+			<UninstallCmd>PowerToysSetup.exe /uninstall /quiet /norestart</UninstallCmd>
 			<Force32bit>False</Force32bit>
 			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
 			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>

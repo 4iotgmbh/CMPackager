@@ -1,6 +1,6 @@
 <ApplicationDef>
 	<Application>
-		<Name>Foxit PDF Reader Enterprise</Name>
+		<Name>Foxit PDF Reader</Name>
 		<Description>Foxit is a powerful PDF reader for viewing, filling out forms and more</Description>
 		<Publisher>Foxit Software Inc.</Publisher>
 		<AutoInstall>True</AutoInstall>
@@ -8,14 +8,16 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript></PrefetchScript>
-			<URL>https://www.foxit.com/downloads/latest.html?product=Foxit-Enterprise-Reader&amp;platform=&amp;version=&amp;package_type=msi&amp;language=English&amp;distID=</URL>
-			<DownloadFileName>foxitreader.msi</DownloadFileName>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/f/Foxit/FoxitReader" -InstallerType exe -Architecture x64</PrefetchScript>
+			<URL></URL>
+			<DownloadFileName>foxitreader.exe</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
-			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()
-			$Version = ($version.Split('.'))[0..2] -join "."</DownloadVersionCheck>
-			<ExtraCopyFunctions></ExtraCopyFunctions>
+			<DownloadVersionCheck>$Version = (Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion</DownloadVersionCheck>
+			<ExtraCopyFunctions>
+					start-process "$TempDir\$DownloadFileName" -ArgumentList "/extract $TempDir\FoxitReaderTemp /quiet" -wait
+					copy-item "$TempDir\FoxitReaderTemp\*" -Destination "$DestinationPath" -Force -recurse
+			</ExtraCopyFunctions>
 		</Download>
 	</Downloads>
 	<DeploymentTypes>
@@ -28,7 +30,7 @@
 			<BranchCache>True</BranchCache>
 			<ContentFallback>True</ContentFallback>
 			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallationMSI>foxitreader.msi</InstallationMSI>
+			<InstallationMSI>Setup.msi</InstallationMSI>
 			<UninstallCmd></UninstallCmd>
 			<Force32bit>False</Force32bit>
 			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
@@ -53,20 +55,20 @@
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
-		<DeploymentCollection>Foxit PDF Reader Enterprise-Test</DeploymentCollection>
+		<DeploymentCollection>Foxit PDF Reader-Test</DeploymentCollection>
 	</Deployment>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
 		<AvailableOffset>7.00:00:00</AvailableOffset>
 		<DeadlineOffset>14.00:00:00</DeadlineOffset>
-		<DeploymentCollection>Foxit PDF Reader Enterprise-Pilot</DeploymentCollection>
+		<DeploymentCollection>Foxit PDF Reader-Pilot</DeploymentCollection>
 	</Deployment>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
 		<AvailableOffset>14.00:00:00</AvailableOffset>
 		<DeadlineOffset>28.00:00:00</DeadlineOffset>
-		<DeploymentCollection>Foxit PDF Reader Enterprise-General Availability</DeploymentCollection>
+		<DeploymentCollection>Foxit PDF Reader-General Availability</DeploymentCollection>
 	</Deployment>
 </ApplicationDef>

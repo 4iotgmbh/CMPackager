@@ -6,12 +6,10 @@
 		<AutoInstall>True</AutoInstall>
 		<UserDocumentation>https://scratch.mit.edu/</UserDocumentation>
 		<Icon>Scratch.png</Icon>
-		<FolderPath>Costa</FolderPath>
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>
-            $URL =  (Invoke-WebRequest -Uri https://scratch.mit.edu/js/download.bundle.js |  Select -ExpandProperty Content | Select-String "https://downloads.scratch.mit.edu/desktop/Scratch%20Setup.exe" ).Matches[0].ToString()</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/MITMediaLab/Scratch/3" -InstallerType exe -Architecture x86 -scope machine</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>ScratchInstaller.exe</DownloadFileName>
 			<DownloadVersionCheck>
@@ -64,11 +62,7 @@
 		<CleanupSuperseded>True</CleanupSuperseded>
 		<KeepSuperseded>2</KeepSuperseded>
 	</Supersedence>
-		<Supersedence>
-			<Supersedence>True</Supersedence>
-			<Uninstall>False</Uninstall>
-		</Supersedence>
-		<Deployment>
+	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
 		<DeploymentCollection>Scratch-Test</DeploymentCollection>

@@ -9,10 +9,10 @@
 	</Application>
 		<Downloads>
 			<Download DeploymentType="DeploymentType1">
-				<PrefetchScript>$URL = 'https://osdn.net' + (((Invoke-WebRequest https://osdn.net/projects/tortoisesvn).Links) | where -Property InnerText -Like "*TortoiseSVN*x64*.msi").href | Sort-Object -Descending | Select-Object -First 1
-				$HTTPheaders = @{
-					'User-Agent' = '[Microsoft.PowerShell.Commands.PSUserAgent]::FireFox'
-				}</PrefetchScript>
+				<PrefetchScript>$sfUrl = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/t/TortoiseSVN/TortoiseSVN" -InstallerType msi -Architecture x64
+				try { $a = Invoke-WebRequest $sfUrl -MaximumRedirection 0 -ErrorAction SilentlyContinue } catch { $URL = $a.Headers['Location'] }
+				$RedirectURL = $a.Headers['Location']
+				$URL = $(Invoke-WebRequest $RedirectURL | Select-Object -ExpandProperty links).'data-release-url'</PrefetchScript>
 				<URL></URL>
 				<DownloadFileName>TortoiseSVN.msi</DownloadFileName>
 				<Version></Version>

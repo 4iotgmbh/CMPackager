@@ -8,12 +8,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$productName = 'Firebox Cloud'
-$webSoftwareHome = Invoke-WebRequest -Uri 'https://software.watchguard.com/SoftwareHome'
-if ($webSoftwareHome.Content -match "var\s+devices\s*=\s*(\[.+\])") {
-    $productID = ((($Matches[1] | ConvertFrom-Json) | Where-Object Title -eq "Firebox and XTM").ProductFamilies | Where-Object Title -eq $productName).ID
-    $url = (Invoke-WebRequest -Uri "https://software.watchguard.com/SoftwareDownloads?current=true&amp;familyId=$($productID)" -UseBasicParsing | Select-Object -ExpandProperty links | Where-Object -Property href -like "*WG-Authentication-Client*.msi").href
-}</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/w/WatchGuard/WatchGuardAuthenticationClient" -InstallerType msi</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>WG-Authentication-Client.msi</DownloadFileName>
 			<Version></Version>

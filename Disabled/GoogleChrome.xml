@@ -9,23 +9,19 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript></PrefetchScript>
-			<URL>https://dl.google.com/edgedl/chrome/install/GoogleChromeStandaloneEnterprise64.msi</URL>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/g/Google/Chrome" -InstallerType msi -Architecture x64</PrefetchScript>
+			<URL></URL>
 			<DownloadFileName>googlechromestandaloneenterprise64.msi</DownloadFileName>
-			<DownloadVersionCheck>#Script to check version
-			$Output = Get-ExtensionAttribute -FullName $Global:TempDir\$DownloadFileName -ExtensionAttribute Comments
-			$Version = ($($Output.Comments).Split(" "))[0]</DownloadVersionCheck>
+			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<Version></Version>
 			<FullVersion></FullVersion>
 			<ExtraCopyFunctions></ExtraCopyFunctions>
 		</Download>
 		<Download DeploymentType="DeploymentType2">
-			<PrefetchScript></PrefetchScript>
-			<URL>https://dl.google.com/edgedl/chrome/install/GoogleChromeStandaloneEnterprise.msi</URL>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/g/Google/Chrome" -InstallerType msi -Architecture x86</PrefetchScript>
+			<URL></URL>
 			<DownloadFileName>googlechromestandaloneenterprise.msi</DownloadFileName>
-			<DownloadVersionCheck>#Script to check version
-			$Output = Get-ExtensionAttribute -FullName $Global:TempDir\$DownloadFileName -ExtensionAttribute Comments
-			$Version = ($($Output.Comments).Split(" "))[0]</DownloadVersionCheck>
+			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<Version></Version>
 			<FullVersion></FullVersion>
 			<ExtraCopyFunctions></ExtraCopyFunctions>

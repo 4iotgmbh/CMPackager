@@ -1,0 +1,86 @@
+<ApplicationDef>
+	<Application>
+		<Name>Microsoft Power BI Desktop for Report Server</Name>
+		<Description>Power BI is a suite of business analytics tools that deliver insights throughout your organization. Connect to hundreds of data sources, simplify data prep, and drive ad hoc analysis. Produce beautiful reports, then publish them for your organization to consume on the web and across mobile devices. Everyone can create personalized dashboards with a unique, 360-degree view of their business. And scale across the enterprise, with governance and security built-in.</Description>
+		<Publisher>Microsoft</Publisher>
+		<AutoInstall>True</AutoInstall>
+		<UserDocumentation>https://www.microsoft.com/en-us/download/details.aspx?id=45331</UserDocumentation>
+		<Icon>PowerBIDesktopRS.ico</Icon>
+	</Application>
+	<Downloads>
+		<Download DeploymentType="DeploymentType1">
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/PowerBIReportServer" -InstallerType burn -Architecture x64</PrefetchScript>
+			<URL></URL>
+			<DownloadFileName>PowerBIReportServer.exe</DownloadFileName>
+			<DownloadVersionCheck>$Version = ((Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
+			<FullVersion></FullVersion>
+			<Version></Version>
+		</Download>
+	</Downloads>
+	<DeploymentTypes>
+        <DeploymentType Name="DeploymentType1">
+            <DeploymentTypeName>Silent Installer for Microsoft Power BI Desktop for Report Server x64</DeploymentTypeName>
+            <InstallationType>Script</InstallationType>
+            <Comments>Silent Installer for Microsoft Power BI Desktop for Report Server x64</Comments>
+            <Language>English</Language>
+            <CacheContent>False</CacheContent>
+            <BranchCache>True</BranchCache>
+            <ContentFallback>True</ContentFallback>
+            <OnSlowNetwork>Download</OnSlowNetwork>
+            <InstallProgram>PowerBIReportServer.exe -s -norestart ACCEPT_EULA=1 INSTALLDESKTOPSHORTCUT=0</InstallProgram>
+            <InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
+            <LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
+            <UserInteractionMode>Hidden</UserInteractionMode>
+            <ReqUserInteraction>False</ReqUserInteraction>
+            <EstRuntimeMins>15</EstRuntimeMins>
+            <MaxRuntimeMins>45</MaxRuntimeMins>
+            <RebootBehavior>BasedOnExitCode</RebootBehavior>
+            <DetectionMethodType>CustomScript</DetectionMethodType>
+            <ScriptLanguage>PowerShell</ScriptLanguage>
+            <DetectionMethod>$InstalledItem = (Get-ChildItem -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue | where-object {$_.GetValue("DisplayName") -eq "Microsoft Power BI Desktop for Report Server (x64)"})
+if (-not ([System.String]::IsNullorEmpty($InstalledItem))){
+    if ([Version]$($InstalledItem.GetValue("DisplayVersion")) -ge [Version]"$Version"){
+        write-Output "Installed"
+    }
+}
+            </DetectionMethod>
+            <RequirementsRules>
+                <RequirementsRule>
+                    <RequirementsRuleType>Existential</RequirementsRuleType>
+                    <RequirementsRuleValue>
+                        <RuleValue>True</RuleValue>
+                    </RequirementsRuleValue>
+                    <RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
+                </RequirementsRule>
+            </RequirementsRules>
+        </DeploymentType>
+	</DeploymentTypes>
+	<Distribution>
+		<DistributeContent>True</DistributeContent>
+	</Distribution>
+	<Supersedence>
+		<Supersedence>True</Supersedence>
+		<Uninstall>False</Uninstall>
+		<CleanupSuperseded>True</CleanupSuperseded>
+		<KeepSuperseded>2</KeepSuperseded>
+	</Supersedence>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<DeploymentCollection>Microsoft Power BI Desktop for Report Server-Test</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>7.00:00:00</AvailableOffset>
+		<DeadlineOffset>14.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Microsoft Power BI Desktop for Report Server-Pilot</DeploymentCollection>
+	</Deployment>
+	<Deployment>
+		<DeploySoftware>True</DeploySoftware>
+		<Purpose>Required</Purpose>
+		<AvailableOffset>14.00:00:00</AvailableOffset>
+		<DeadlineOffset>28.00:00:00</DeadlineOffset>
+		<DeploymentCollection>Microsoft Power BI Desktop for Report Server-General Availability</DeploymentCollection>
+	</Deployment>
+</ApplicationDef>

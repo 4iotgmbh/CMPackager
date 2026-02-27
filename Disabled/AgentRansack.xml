@@ -9,27 +9,17 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>
-            $DLPage = 'https://mythicsoft.com/agentransack/download/'
-			$URL = (Invoke-WebRequest -Uri $DLPage -UseBasicParsing).Links |Where-Object -Property href -Like '*agentransack_x64*.zip' | Select-Object -First 1 -expand href
-            $URL = 'https://' + $URL.substring(2)
-            </PrefetchScript>
+			<PrefetchScript>$result = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Mythicsoft/AgentRansack" -InstallerType zip -Architecture x64
+$URL = $result.Url
+$NestedInstallerFile = $result.NestedFilePath</PrefetchScript>
 			<URL></URL>
-			<DownloadFileName>AgentRansack.zip</DownloadFileName>
+			<DownloadFileName>AgentRansack_x64.zip</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
-			<DownloadVersionCheck>
-            Add-LogContent "Extracting $DownloadFile to $TempDir"
-            Expand-Archive $DownloadFile -DestinationPath "$TempDir\ARTemp" -ErrorAction SilentlyContinue
-            $DownloadFileName = 'AgentRansack_x64.msi'
-            $DownloadFile = "$TempDir\$DownloadFileName"
-            Add-LogContent "Renaming contents to AgentRansack_x64.msi"
-            Get-ChildItem "$TempDir\ARTemp\agentransack_x64*.msi" | Rename-Item -NewName "$TempDir\ARTemp\AgentRansack_x64.msi"
-            Copy-Item "$TempDir\ARTemp\$DownloadFileName" "$DownloadFile" -Force
-            Add-LogContent "Checking version using Get-MSIInfo"
-            $Version = ([String](Get-MSIInfo "$DownloadFile" -Property ProductVersion)).Trim()
-            </DownloadVersionCheck>
-			<ExtraCopyFunctions>$DownloadFile = '$TempDir\AgentRansack_x64.msi'</ExtraCopyFunctions>
+			<DownloadVersionCheck>&amp; $ScriptRoot\7za.exe e "$DownloadFile" -o"$TempDir\AgentRansackTemp" $NestedInstallerFile -y
+[String]$Version = ([String](Get-MSIInfo -Path "$TempDir\AgentRansackTemp\$NestedInstallerFile" -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
+			<ExtraCopyFunctions>Copy-Item "$TempDir\AgentRansackTemp\$NestedInstallerFile" -Destination "$DestinationPath\AgentRansack_x64.msi" -Force
+Remove-Item "$DestinationPath\AgentRansack_x64.zip" -Force</ExtraCopyFunctions>
 		</Download>
 	</Downloads>
 	<DeploymentTypes>

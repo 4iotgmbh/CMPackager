@@ -9,8 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-			$URL = "https://github.com$((Invoke-WebRequest https://github.com/dbeaver/dbeaver/releases/latest -UseBasicParsing |Select -ExpandProperty Links |where -Property href -like "*dbeaver-ce*-x86_64-setup.exe")[0].href)"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/d/DBeaver/DBeaver/Community" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>dbeaver-ce-x86_64-setup.exe</DownloadFileName>
 			<Version></Version>

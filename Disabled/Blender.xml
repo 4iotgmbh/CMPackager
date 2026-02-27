@@ -10,7 +10,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = (Invoke-WebRequest -Uri (Invoke-WebRequest https://www.blender.org/download/ -UseBasicParsing | Select -expand links | Where-Object href -like "*windows64.msi/").href[0] | select -ExpandProperty links | ? href -like "*.msi").href.ToString()</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/b/BlenderFoundation/Blender" -InstallerType msi -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>Blender.msi</DownloadFileName>
 			<DownloadVersionCheck>$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>

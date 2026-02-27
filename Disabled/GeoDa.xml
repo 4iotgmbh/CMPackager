@@ -9,16 +9,21 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-			$LatestRel = "https://github.com$((Invoke-WebRequest https://github.com/GeoDaCenter/geoda/tags -UseBasicParsing |Select -ExpandProperty Links |where -Property href -like "*/tag/*")[0].href)"
-			$URL = "https://github.com$((Invoke-WebRequest $LatestRel -UseBasicParsing |Select -ExpandProperty Links |where -Property href -like "*Windows-64bit.exe")[0].href)"
-			</PrefetchScript>
+			<PrefetchScript>
+					$URL = $(Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/g/GeoDa/GeoDa" -InstallerType zip -Architecture x64).Url
+				</PrefetchScript>
 			<URL></URL>
-			<DownloadFileName>GeoDa-Windows-64bit.exe</DownloadFileName>
+			<DownloadFileName>GeoDa-Windows-64bit.zip</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
-			<DownloadVersionCheck>$Version = ((Get-item $TempDir\$DownloadFileName).VersionInfo.ProductVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
-			<ExtraCopyFunctions></ExtraCopyFunctions>
+			<DownloadVersionCheck>
+					&amp; $ScriptRoot\7za.exe x "$TempDir\GeoDa-Windows-64bit.zip" -o"$TempDir\GeoDaTemp" -y
+					$Version = ((Get-item $TempDir\GeoDaTemp\*.exe).VersionInfo.ProductVersion).TrimStart().TrimEnd()
+			</DownloadVersionCheck>
+			<ExtraCopyFunctions>
+					ren $(ls $tempDir\GeoDaTemp\GeoDa*.exe) GeoDa-Windows-64bit.exe
+					Copy-Item $TempDir\GeoDaTemp\*.exe -Destination $DestinationPath -Force -Recurse
+		</ExtraCopyFunctions>
 		</Download>
 	</Downloads>
 	<DeploymentTypes>

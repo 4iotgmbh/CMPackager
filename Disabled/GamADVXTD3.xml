@@ -10,8 +10,10 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $URL = "https://github.com$((Invoke-WebRequest https://github.com/taers232c/GAMADV-XTD3/releases/latest -UseBasicParsing | Select -expand links | ? href -like "*windows-x86_64.msi").href.ToString())"</PrefetchScript>
+			<PrefetchScript>
+							$release = Invoke-RestMethod "https://api.github.com/repos/taers232c/GAMADV-XTD3/releases/latest" -Headers @{ "User-Agent" = "CMPackager" }
+							$URL = ($release.assets | Where-Object { $_.name -like "*windows-x86_64.msi" }).browser_download_url
+			</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>GAMADV-XTD3.msi</DownloadFileName>
 			<DownloadVersionCheck>$Version = ([String](Get-MSIInfo $DownloadFile -Property ProductVersion)).Trim()</DownloadVersionCheck>

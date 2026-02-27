@@ -9,22 +9,9 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript> $linkPath = ((Invoke-WebRequest -URI https://notepad-plus-plus.org -UseBasicParsing) | Select-Object -ExpandProperty links | Where-Object -Property href -like "/downloads/v*").href 
-			$downloadurl = "https://notepad-plus-plus.org$linkpath"
-			$url = ((Invoke-WebRequest -URI $downloadurl -UseBasicParsing) | Select-Object -ExpandProperty links | Where-Object -Property href -like "*npp.*.installer.x64.exe").href | Select-Object -Index 0</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/n/Notepad%2B%2B/Notepad%2B%2B" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>NotePadppInstallerx64.exe</DownloadFileName>
-			<Version></Version>
-			<FullVersion></FullVersion>
-			<DownloadVersionCheck>$Version = (Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion</DownloadVersionCheck>
-			<ExtraCopyFunctions></ExtraCopyFunctions>
-		</Download>
-		<Download DeploymentType="DeploymentType2">
-			<PrefetchScript>$linkPath = ((Invoke-WebRequest -URI https://notepad-plus-plus.org -UseBasicParsing) | Select-Object -ExpandProperty links | Where-Object -Property href -like "/downloads/v*").href 
-			$downloadurl = "https://notepad-plus-plus.org$linkpath"
-			$url = ((Invoke-WebRequest -URI $downloadurl -UseBasicParsing) | Select-Object -ExpandProperty links | Where-Object -Property href -like "*npp.*.installer.exe").href | Select-Object -Index 0</PrefetchScript>
-			<URL></URL>
-			<DownloadFileName>NotePadppInstallerx86.exe</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
 			<DownloadVersionCheck>$Version = (Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersion</DownloadVersionCheck>
@@ -64,43 +51,6 @@
 					<RequirementsRuleType>Existential</RequirementsRuleType>
 					<RequirementsRuleValue>
 						<RuleValue>True</RuleValue>
-					</RequirementsRuleValue>
-					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
-				</RequirementsRule>
-			</RequirementsRules>
-		</DeploymentType>
-		<DeploymentType Name="DeploymentType2">
-			<DeploymentTypeName>NotePad++ Silent Installer x86</DeploymentTypeName>
-			<InstallationType>Script</InstallationType>
-			<CacheContent>False</CacheContent>
-			<BranchCache>True</BranchCache>
-			<ContentFallback>True</ContentFallback>
-			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>NotePadppInstallerx86.exe /noUpdater /S</InstallProgram>
-			<UninstallCmd>`"%ProgramFiles(x86)%\Notepad++\uninstall.exe`" /S</UninstallCmd>
-			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
-			<UserInteractionMode>Hidden</UserInteractionMode>
-			<EstRuntimeMins>15</EstRuntimeMins>
-			<MaxRuntimeMins>60</MaxRuntimeMins>
-			<RebootBehavior>BasedOnExitCode</RebootBehavior>
-			<DetectionMethodType>Custom</DetectionMethodType>
-			<CustomDetectionMethods>
-				<DetectionClause>
-					<DetectionClauseType>File</DetectionClauseType>
-					<Name>notepad++.exe</Name>
-					<Path>%ProgramFiles(x86)%\Notepad++\</Path>
-					<PropertyType>Version</PropertyType>
-					<ExpectedValue>$Version</ExpectedValue>
-					<ExpressionOperator>GreaterEquals</ExpressionOperator>
-					<Value>True</Value>
-				</DetectionClause>
-			</CustomDetectionMethods>
-			<RequirementsRules>
-				<RequirementsRule>
-					<RequirementsRuleType>Existential</RequirementsRuleType>
-					<RequirementsRuleValue>
-						<RuleValue>False</RuleValue>
 					</RequirementsRuleValue>
 					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
 				</RequirementsRule>

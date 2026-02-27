@@ -9,8 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>
-			$URL = "https:$(((Invoke-WebRequest "https://www.citrix.com/downloads/workspace-app/windows/workspace-app-for-windows-latest.html").links | where rel -like "*CitrixWorkspaceApp.exe*")[0].rel)"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/c/Citrix/Workspace" -InstallerType exe -Architecture x86</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>CitrixWorkspaceApp.exe</DownloadFileName>
 			<Version></Version>

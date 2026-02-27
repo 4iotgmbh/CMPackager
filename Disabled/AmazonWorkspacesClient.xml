@@ -9,7 +9,7 @@
 	</Application>
 		<Downloads>
 			<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = ((Invoke-WebRequest -Uri https://clients.amazonworkspaces.com).Links | where href -like *.msi).href</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/a/Amazon/WorkspacesClient" -InstallerType msi -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>AmazonWorkspaces.msi</DownloadFileName>
 			<Version></Version>

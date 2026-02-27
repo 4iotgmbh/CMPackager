@@ -9,18 +9,10 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<URL>https://download.mozilla.org/?product=firefox-msi-latest-ssl&amp;os=win64&amp;lang=en-US</URL>
+			<URL>https://download.mozilla.org/?product=firefox-msi-latest-ssl&amp;os=win64&amp;lang=de</URL>
 			<DownloadFileName>Firefoxx64.msi</DownloadFileName>
 			<DownloadVersionCheck>$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<AppRepoFolder>x64</AppRepoFolder>
-			<FullVersion></FullVersion>
-			<Version></Version>
-		</Download>
-		<Download DeploymentType="DeploymentType2">
-			<URL>https://download.mozilla.org/?product=firefox-msi-latest-ssl&amp;os=win&amp;lang=en-US</URL>
-			<DownloadFileName>Firefoxx86.msi</DownloadFileName>
-			<DownloadVersionCheck>$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
-			<AppRepoFolder>x86</AppRepoFolder>
 			<FullVersion></FullVersion>
 			<Version></Version>
 		</Download>
@@ -67,39 +59,6 @@
 					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
 				</RequirementsRule>
 			</RequirementsRules>
-		</DeploymentType>
-		<DeploymentType Name="DeploymentType2">
-			<DeploymentTypeName>Firefox x86 Silent Install</DeploymentTypeName>
-			<InstallationType>Script</InstallationType>
-			<ContentFallback>True</ContentFallback>
-			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>msiexec.exe /i Firefoxx86.msi /qn /norestart /l*v install.log</InstallProgram>
-			<UninstallCmd>"%ProgramFiles%\Mozilla Firefox\uninstall\helper.exe" -ms</UninstallCmd>
-			<UninstallOption>NoneRequired</UninstallOption>
-			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
-			<UserInteractionMode>Hidden</UserInteractionMode>
-			<EstRuntimeMins>5</EstRuntimeMins>
-			<MaxRuntimeMins>20</MaxRuntimeMins>
-			<RebootBehavior>BasedOnExitCode</RebootBehavior>
-			<DetectionMethodType>Custom</DetectionMethodType>
-			<CustomDetectionMethods>
-				<DetectionClause>
-					<DetectionClauseType>File</DetectionClauseType>
-					<Name>firefox.exe</Name>
-					<Path>%ProgramFiles%\Mozilla Firefox</Path>
-					<PropertyType>Version</PropertyType>
-					<ExpectedValue>$Version</ExpectedValue>
-					<ExpressionOperator>GreaterEquals</ExpressionOperator>
-					<Value>True</Value>
-                    <Is64Bit>False</Is64Bit>
-				</DetectionClause>
-			</CustomDetectionMethods>
-			<InstallBehavior>
-				<InstallBehaviorProcess DisplayName="Mozilla Firefox">
-					<InstallBehaviorExe>firefox.exe</InstallBehaviorExe>
-				</InstallBehaviorProcess>
-			</InstallBehavior>
 		</DeploymentType>
 	</DeploymentTypes>
 	<Distribution>

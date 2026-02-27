@@ -9,38 +9,13 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>[xml]$rss = Invoke-WebRequest https://sourceforge.net/projects/vcxsrv/rss | select -ExpandProperty Content
-$downloadurl = $rss.SelectNodes('//item').link | ? {$_ -like '*/vcxsrv-64.*.installer.exe*'} | select -First 1
-$URL = $downloadurl
-$version = $downloadurl -replace '^.*vcxsrv-64\.' -replace '\.installer\.exe/download'
-$download.Version = $version
-$FullVersion = $version
-if (!($PSDefaultParameterValues.ContainsKey('Invoke-WebRequest:UserAgent'))) {$PSDefaultParameterValues.Add('Invoke-WebRequest:UserAgent','NotABrowser')}</PrefetchScript>
-			<!-- SourceForge will only present the file to a non-browser user agent -->
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/marha/VcXsrv" -InstallerType exe -Architecture x64</PrefetchScript>
 			<DownloadFileName>vcxsrv-64.exe</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
-			<DownloadVersionCheck></DownloadVersionCheck>
+			<DownloadVersionCheck>$Version = ((Get-Item $TempDir\$DownloadFileName).VersionInfo.FileVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<AppRepoFolder>x64</AppRepoFolder>
-			<!-- Remove the changed UserAgent -->
-			<ExtraCopyFunctions>$PSDefaultParameterValues.Remove('Invoke-WebRequest:UserAgent')</ExtraCopyFunctions>
-		</Download>
-		<Download DeploymentType="DeploymentType2">
-			<PrefetchScript>[xml]$rss = Invoke-WebRequest https://sourceforge.net/projects/vcxsrv/rss | select -ExpandProperty Content
-$downloadurl = $rss.SelectNodes('//item').link | ? {$_ -like '*/vcxsrv.*.installer.exe*'} | select -First 1
-$URL = $downloadurl
-$version = $downloadurl -replace '^.*vcxsrv\.' -replace '\.installer\.exe/download'
-$download.Version = $version
-$FullVersion = $version
-if (!($PSDefaultParameterValues.ContainsKey('Invoke-WebRequest:UserAgent'))) {$PSDefaultParameterValues.Add('Invoke-WebRequest:UserAgent','NotABrowser')}</PrefetchScript>
-			<!-- SourceForge will only present the file to a non-browser user agent -->
-			<DownloadFileName>vcxsrv-86.exe</DownloadFileName>
-			<Version></Version>
-			<FullVersion></FullVersion>
-			<DownloadVersionCheck></DownloadVersionCheck>
-			<AppRepoFolder>x86</AppRepoFolder>
-			<!-- Remove the changed UserAgent -->
-			<ExtraCopyFunctions>$PSDefaultParameterValues.Remove('Invoke-WebRequest:UserAgent')</ExtraCopyFunctions>
+			<ExtraCopyFunctions></ExtraCopyFunctions>
 		</Download>
 	</Downloads>
 	<DeploymentTypes>
@@ -89,43 +64,6 @@ if (!($PSDefaultParameterValues.ContainsKey('Invoke-WebRequest:UserAgent'))) {$P
 					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
 				</RequirementsRule>
 			</RequirementsRules>
-		</DeploymentType>
-		<DeploymentType Name="DeploymentType2">
-			<DeploymentTypeName>vcxsrv-86</DeploymentTypeName>
-			<InstallationType>Script</InstallationType>
-			<CacheContent>False</CacheContent>
-			<BranchCache>True</BranchCache>
-			<ContentFallback>True</ContentFallback>
-			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>vcxsrv-86.exe /S</InstallProgram>
-			<UninstallCmd>%ProgramFiles%\VcXsrv\uninstall.exe /S</UninstallCmd>
-			<UninstallOption>NoneRequired</UninstallOption>
-			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
-			<UserInteractionMode>Hidden</UserInteractionMode>
-			<EstRuntimeMins>10</EstRuntimeMins>
-			<MaxRuntimeMins>30</MaxRuntimeMins>
-			<RebootBehavior>BasedOnExitCode</RebootBehavior>
-			<DetectionMethodType>Custom</DetectionMethodType>
-			<CustomDetectionMethods>
-				<DetectionClause>
-					<DetectionClauseType>File</DetectionClauseType>
-					<Name>vcxsrv.exe</Name>
-					<Path>%ProgramFiles%\VcXsrv\</Path>
-					<PropertyType>Version</PropertyType>
-					<ExpectedValue>$Version</ExpectedValue>
-					<ExpressionOperator>GreaterEquals</ExpressionOperator>
-					<Value>True</Value>
-				</DetectionClause>
-			</CustomDetectionMethods>
-			<InstallBehavior>
-				<InstallBehaviorProcess DisplayName="VcXsrv">
-					<InstallBehaviorExe>vcxsrv.exe</InstallBehaviorExe>
-				</InstallBehaviorProcess>
-				<InstallBehaviorProcess DisplayName="XLaunch">
-					<InstallBehaviorExe>xlaunch.exe</InstallBehaviorExe>
-				</InstallBehaviorProcess>
-			</InstallBehavior>
 		</DeploymentType>
 	</DeploymentTypes>
 	<Distribution>

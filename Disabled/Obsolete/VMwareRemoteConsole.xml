@@ -9,19 +9,20 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$base = 'https://softwareupdate.vmware.com/cds/vmw-desktop/vmrc/'
-$ver = ((iwr $base).Links | ? href -ne '../').href
-$number = ((iwr "$base$ver").Links | ? href -ne '../').href
-$Download.Version = $ver -replace '/'
-$Version = $Download.Version
-$url = "$base$ver$number\windows\vmrc-windows.tar"
+			<PrefetchScript>
+						$base = 'https://softwareupdate.vmware.com/cds/vmw-desktop/vmrc/'
+						$ver = ((iwr $base).Links | ? href -ne '../').href
+						$number = ((iwr "$base$ver").Links | ? href -ne '../').href
+						$Download.Version = $ver -replace '/'
+						$Version = $Download.Version
+						$url = "$base$ver$number\windows\vmrc-windows.tar"
 			</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>vmrc.tar</DownloadFileName>
-			<!-- <DownloadVersionCheck>
+			<DownloadVersionCheck>
 				&amp; $ScriptRoot\7za.exe x "$DownloadFile" -o"$TempDir\vmrctemp" -y
 				$Version = (get-item $TempDir\vmrctemp\VMWare-VMRC-*.exe).VersionInfo.ProductVersion
-			</DownloadVersionCheck> -->
+			</DownloadVersionCheck>
 			<Version></Version>
 			<FullVersion></FullVersion>
 			<ExtraCopyFunctions>

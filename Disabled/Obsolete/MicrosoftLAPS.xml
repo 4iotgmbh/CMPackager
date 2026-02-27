@@ -10,7 +10,7 @@
     </Application>
     <Downloads>
         <Download DeploymentType="DeploymentType1">
-            <PrefetchScript>$URL = ((Invoke-WebRequest "https://www.microsoft.com/en-us/download/confirmation.aspx?id=46899" -UseBasicParsing).Links | Where-Object href -like "*LAPS.x64.msi")[0].href</PrefetchScript>
+            <PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/LAPS" -InstallerType msi -Architecture x64</PrefetchScript>
             <URL></URL>
             <DownloadFileName>LAPS.x64.msi</DownloadFileName>
 			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>
@@ -18,7 +18,7 @@
 			<Version></Version>
         </Download>
         <Download DeploymentType="DeploymentType2">
-            <PrefetchScript>$URL = ((Invoke-WebRequest "https://www.microsoft.com/en-us/download/confirmation.aspx?id=46899" -UseBasicParsing).Links | Where-Object href -like "*LAPS.x86.msi")[0].href</PrefetchScript>
+            <PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/LAPS" -InstallerType msi -Architecture x86</PrefetchScript>
             <URL></URL>
             <DownloadFileName>LAPS.x86.msi</DownloadFileName>
 			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()</DownloadVersionCheck>

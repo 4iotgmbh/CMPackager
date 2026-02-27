@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_agentransack.ps1\")",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:filezilla-project.org)",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_filezilla2.ps1\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_filezilla3.ps1\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_filezilla4.ps1\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_filezilla5.ps1\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_filezilla6.ps1\")",
+      "Bash(powershell.exe -Command \"[xml]$x = Get-Content ''c:\\\\git\\\\cmpackager\\\\Disabled\\\\FileZilla.xml'' -Raw; $x.ApplicationDef.Downloads.Download.PrefetchScript | Write-Host\")"
+    ]
+  }
+}

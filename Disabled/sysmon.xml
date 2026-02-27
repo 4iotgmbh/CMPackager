@@ -9,14 +9,19 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>if (((Invoke-WebRequest https://docs.microsoft.com/en-us/sysinternals/downloads/sysmon).Content -match 'Sysmon v?(\d[\.\d]*)') -and $matches[1]) {$Download.Version = $matches[1]}</PrefetchScript>
-			<URL>https://live.sysinternals.com/Sysmon.exe</URL>
-			<DownloadFileName>Sysmon.exe</DownloadFileName>
+			<PrefetchScript>$URL = $(Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/Sysinternals/Sysmon" -InstallerType zip -architecture x64).url</PrefetchScript>
+			<URL></URL>
+			<DownloadFileName>Sysmon.zip</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
-			<DownloadVersionCheck>$Version = (Get-Item $DownloadFile).VersionInfo.ProductVersion</DownloadVersionCheck>
+			<DownloadVersionCheck>
+					&amp; $ScriptRoot\7za.exe x "$DownloadFile" -o"$TempDir\SysmonTemp" -y
+					$Version = (Get-Item $TempDir\SysmonTemp\Sysmon.exe).VersionInfo.ProductVersion
+			</DownloadVersionCheck>
 			<!-- If $ScriptRoot\ExtraFiles\sysmonconfig.xml exists, add to application -->
-			<ExtraCopyFunctions>if (Test-Path $ScriptRoot\ExtraFiles\sysmonconfig.xml) {
+			<ExtraCopyFunctions>
+			Copy-Item -Path $tempdir\SysmonTemp\*.* -Destination $DestinationPath	
+			if (Test-Path $ScriptRoot\ExtraFiles\sysmonconfig.xml) {
 			Copy-Item -Path $ScriptRoot\ExtraFiles\sysmonconfig.xml -Destination $DestinationPath
 			$AssociatedDeploymentType = $Recipe.ApplicationDef.DeploymentTypes.DeploymentType | Where-Object Name -eq $Download.DeploymentType
 			$AssociatedDeploymentType.InstallProgram += ' sysmonconfig.xml'

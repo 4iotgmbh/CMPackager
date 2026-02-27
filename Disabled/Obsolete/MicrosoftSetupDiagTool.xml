@@ -9,7 +9,8 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<URL>https://go.microsoft.com/fwlink/?linkid=870142</URL>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/SetupDiag" -InstallerType exe -Architecture x64</PrefetchScript>
+			<URL></URL>
 			<DownloadFileName>SetupDiag.exe</DownloadFileName>
 			<DownloadVersionCheck>$Version = ((Get-item $TempDir\$DownloadFileName).VersionInfo.ProductVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<FullVersion></FullVersion>

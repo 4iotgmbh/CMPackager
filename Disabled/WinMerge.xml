@@ -9,15 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>
-			$Releases = 'https://winmerge.org/downloads/'
-			$Filename = (Invoke-WebRequest -Uri $Releases -UseBasicParsing).Links | Where-Object -Property href -Like '*WinMerge*x64*.exe*' | Select-Object -First 1 -expand href
-			[String]$Download.Version = $Filename -split '-|.exe' | select -Skip 2 -First 1
-			$URL = $Filename
-			$HTTPheaders = @{
-				'User-Agent' = '[Microsoft.PowerShell.Commands.PSUserAgent]::FireFox'
-			}
-			</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/w/WinMerge/WinMerge" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>WinMerge.exe</DownloadFileName>
 			<Version></Version>

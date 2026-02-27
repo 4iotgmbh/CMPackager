@@ -9,18 +9,12 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$releases = 'https://data.services.jetbrains.com/products/releases?code=TBA&amp;latest=true&amp;type=release'
-			$json = Invoke-WebRequest $releases | ConvertFrom-Json
-			$LinkPath = $json.TBA.downloads.windows.link
-			$Version = "$($json.TBA.build)"
-			$Download.Version = $Version
-			$URL = $LinkPath
-			</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/j/JetBrains/Toolbox" -InstallerType exe -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>jetbrains-toolbox.exe</DownloadFileName>
 			<Version></Version>
 			<FullVersion></FullVersion>
-			<DownloadVersionCheck></DownloadVersionCheck>
+			<DownloadVersionCheck>$Version = ((Get-Item $TempDir\$DownloadFileName).VersionInfo.FileVersion).TrimStart().TrimEnd()</DownloadVersionCheck>
 			<ExtraCopyFunctions></ExtraCopyFunctions>
 		</Download>
 	</Downloads>

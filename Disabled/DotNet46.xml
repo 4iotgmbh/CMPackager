@@ -9,8 +9,8 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = ((Invoke-WebRequest "https://www.microsoft.com/en-us/download/confirmation.aspx?id=48137" -UseBasicParsing).Links | Where-Object href -like "*.exe" | Select-Object -Last 1).href</PrefetchScript>
-			<URL>https://www.microsoft.com/en-us/download/confirmation.aspx?id=48137</URL>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/DotNet/Framework/Runtime" -InstallerType exe</PrefetchScript>
+			<URL></URL>
 			<DownloadFileName>NDP46-x86-x64-AllOS-ENU.exe</DownloadFileName>
 			<DownloadVersionCheck>$Version = ((Get-item $TempDir\$DownloadFileName).VersionInfo.FileVersionRaw).ToString()</DownloadVersionCheck>
 			<FullVersion></FullVersion>
