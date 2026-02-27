@@ -4,7 +4,7 @@
 		<Description>Foxit is a powerful PDF reader for viewing, filling out forms and more</Description>
 		<Publisher>Foxit Software Inc.</Publisher>
 		<AutoInstall>True</AutoInstall>
-		<Icon>FoxitReader.ico</Icon>
+		<Icon>FoxitReader.png</Icon>
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">

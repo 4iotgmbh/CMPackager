@@ -4,7 +4,7 @@
 		<Description>Watchguard Mobile VPN with SSL Client</Description>
 		<Publisher>Watchguard</Publisher>
 		<AutoInstall>True</AutoInstall>
-		<Icon>watchguard_mobilevpn.ico</Icon>
+		<Icon>watchguard_mobilevpn.png</Icon>
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">

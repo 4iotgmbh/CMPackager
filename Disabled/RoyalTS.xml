@@ -5,7 +5,7 @@
 		<Publisher>Royal Applications</Publisher>
 		<AutoInstall>True</AutoInstall>
 		<UserDocumentation>https://content.royalapplications.com/Help/RoyalTS/V4/index.html?introduction_yourfirstconnection.htm</UserDocumentation>
-		<Icon>RoyalTS.ico</Icon>
+		<Icon>RoyalTS.png</Icon>
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">

@@ -5,7 +5,7 @@
 		<Publisher>JetBrains</Publisher>
 		<AutoInstall>True</AutoInstall>
 		<UserDocumentation>https://toolbox-support.jetbrains.com/hc/en-us</UserDocumentation>
-		<Icon>Jetbrains-toolbox.ico</Icon>
+		<Icon>Jetbrains-toolbox.png</Icon>
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">

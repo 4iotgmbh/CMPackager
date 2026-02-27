@@ -10,7 +10,12 @@
       "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_filezilla4.ps1\")",
       "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_filezilla5.ps1\")",
       "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\fix_filezilla6.ps1\")",
-      "Bash(powershell.exe -Command \"[xml]$x = Get-Content ''c:\\\\git\\\\cmpackager\\\\Disabled\\\\FileZilla.xml'' -Raw; $x.ApplicationDef.Downloads.Download.PrefetchScript | Write-Host\")"
+      "Bash(powershell.exe -Command \"[xml]$x = Get-Content ''c:\\\\git\\\\cmpackager\\\\Disabled\\\\FileZilla.xml'' -Raw; $x.ApplicationDef.Downloads.Download.PrefetchScript | Write-Host\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type} %{url_effective}\" \"https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Slack_icon_2019.svg/256px-Slack_icon_2019.svg.png\" --user-agent \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36\")",
+      "Bash(__NEW_LINE_223c1f84fd3a8b95__ curl -s \"https://api.github.com/repos/JetBrains/logos/contents/web/toolbox\" -H \"User-Agent: curl/7.88\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -File \"c:\\\\git\\\\cmpackager\\\\find_agentransack_icon.ps1\")",
+      "Bash(powershell.exe -Command \"Remove-Item ''c:\\\\git\\\\cmpackager\\\\download_icons.ps1'',''c:\\\\git\\\\cmpackager\\\\download_icons_retry.ps1'',''c:\\\\git\\\\cmpackager\\\\find_agentransack_icon.ps1'',''c:\\\\git\\\\cmpackager\\\\update_recipe_icons.ps1'' -ErrorAction SilentlyContinue; Write-Host ''Cleaned up''\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -Command \":*)"
     ]
   }
 }

@@ -4,7 +4,7 @@
 		<Description>Watchguard Single Sign-On Client</Description>
 		<Publisher>Watchguard</Publisher>
 		<AutoInstall>True</AutoInstall>
-		<Icon>watchguard_sso_client.ico</Icon>
+		<Icon>watchguard_sso_client.png</Icon>
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
