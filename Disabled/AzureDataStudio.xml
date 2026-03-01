@@ -9,7 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/Azure/DataStudio" -InstallerType exe -Architecture x64</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/m/Microsoft/Azure/DataStudio" -InstallerType exe -Architecture x64 -scope machine</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>azuredatastudio-setup.exe</DownloadFileName>
 			<Version></Version>

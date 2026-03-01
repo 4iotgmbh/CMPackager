@@ -42,7 +42,7 @@
 				<DetectionClause>
 					<DetectionClauseType>File</DetectionClauseType>
 					<Name>Audacity.exe</Name>
-					<Path>%ProgramFiles(x86)%\Audacity\</Path>
+					<Path>%ProgramFiles%\Audacity\</Path>
 					<PropertyType>Version</PropertyType>
 					<ExpectedValue>$FullVersion</ExpectedValue>
 					<ExpressionOperator>GreaterEquals</ExpressionOperator>
