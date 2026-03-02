@@ -31,7 +31,7 @@
 			<ContentFallback>True</ContentFallback>
 			<OnSlowNetwork>Download</OnSlowNetwork>
 			<InstallProgram>ScratchInstaller.exe /allusers /S</InstallProgram>
-			<UninstallCmd>`"%ProgramFiles%\Scratch Desktop\Uninstall Scratch Desktop.exe`" /S</UninstallCmd>
+			<UninstallCmd>`"C:\Program Files (x86)\Scratch 3\Uninstall Scratch 3.exe`" /S</UninstallCmd>
 			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
 			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
 			<UserInteractionMode>Hidden</UserInteractionMode>
@@ -42,8 +42,8 @@
 			<CustomDetectionMethods>
 				<DetectionClause>
 					<DetectionClauseType>File</DetectionClauseType>
-					<Name>Scratch Desktop.exe</Name>
-					<Path>%ProgramFiles%\Scratch Desktop\</Path>
+					<Name>Scratch 3.exe</Name>
+					<Path>C:\Program Files (x86)\Scratch 3</Path>
 					<PropertyType>Version</PropertyType>
 					<ExpectedValue>$FullVersion</ExpectedValue>
 					<ExpressionOperator>GreaterEquals</ExpressionOperator>

@@ -1,7 +1,7 @@
 <ApplicationDef>
 	<Application>
 		<Name>JetBrains Toolbox</Name>
-		<Description>Toolbox App is an application that facilitates easy installation and uninstallation of JetBrains IDEs. It allows users to log in with a JetBrains account and install all of the products they own.</Description>
+		<Description>BROKEN UNTIL CUSTOM LOCATION SUPPORT IS ADDED https://youtrack.jetbrains.com/issue/TBX-5327 Toolbox App is an application that facilitates easy installation and uninstallation of JetBrains IDEs. It allows users to log in with a JetBrains account and install all of the products they own.</Description>
 		<Publisher>JetBrains</Publisher>
 		<AutoInstall>True</AutoInstall>
 		<UserDocumentation>https://toolbox-support.jetbrains.com/hc/en-us</UserDocumentation>

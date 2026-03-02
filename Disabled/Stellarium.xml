@@ -26,7 +26,7 @@
 			<BranchCache>True</BranchCache>
 			<ContentFallback>True</ContentFallback>
 			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>StellariumInstall.exe /VerySilent</InstallProgram>
+			<InstallProgram>StellariumInstall.exe /VerySilent /SUPPRESSMSGBOXES</InstallProgram>
 			<UninstallCmd>`"%ProgramFiles%\Stellarium\unins000.exe`" /SILENT</UninstallCmd>
 			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
 			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>

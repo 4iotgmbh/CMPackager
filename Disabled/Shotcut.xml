@@ -28,7 +28,7 @@
 			<BranchCache>True</BranchCache>
 			<ContentFallback>True</ContentFallback>
 			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>Shotcutx64.exe /S</InstallProgram>
+			<InstallProgram>Shotcutx64.exe /VerySilent /SUPPRESSMSGBOXES</InstallProgram>
 			<UninstallCmd>`"%ProgramFiles%\Shotcut\uninstall.exe`" /S</UninstallCmd>
 			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
 			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
@@ -42,7 +42,7 @@
 				<DetectionClause>
 					<DetectionClauseType>RegistryKeyValue</DetectionClauseType>
 					<Hive>LocalMachine</Hive>
-					<KeyName>SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Shotcut</KeyName>
+					<KeyName>SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Shotcut_is1</KeyName>
 					<PropertyType>String</PropertyType>
 					<ValueName>DisplayVersion</ValueName>
 					<ExpressionOperator>IsEquals</ExpressionOperator>

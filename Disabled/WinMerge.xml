@@ -9,7 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/w/WinMerge/WinMerge" -InstallerType exe -Architecture x64</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/w/WinMerge/WinMerge" -InstallerType exe -Architecture x64 -scope machine</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>WinMerge.exe</DownloadFileName>
 			<Version></Version>
@@ -42,7 +42,7 @@
 				<DetectionClause>
 					<DetectionClauseType>File</DetectionClauseType>
 					<Name>WinMergeU.exe</Name>
-					<Path>%ProgramFiles%\WinMerge\</Path>
+					<Path>C:\Windows\system32\config\systemprofile\AppData\Local\Programs\WinMerge\</Path>
 					<PropertyType>Version</PropertyType>
 					<ExpectedValue>$FullVersion</ExpectedValue>
 					<ExpressionOperator>GreaterEquals</ExpressionOperator>
