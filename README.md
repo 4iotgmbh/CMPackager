@@ -1,4 +1,4 @@
-# CMPackager
+# CMPackager - 4IoT Fork
 
 This Application is a PowerShell Script that can be used to create applications in SCCM, it takes care of downloading, packaging, distributing and deploying the applications described in XML "recipe" files. The goal is to be able to package any frequently updating application with little to no work after creating the recipes.
 
@@ -13,8 +13,16 @@ This Application is a PowerShell Script that can be used to create applications 
 
 ### Prerequisites
 
-MEM ConfigMgr Console - Tested on SCCM 1906 - works best if the console has been opened at least once.
+MEM ConfigMgr Console - Tested on SCCM 2509 - works best if the console has been opened at least once.
 
+
+## Fork specifics
+
+1. Added function to query Winget repo for download URLs, to be used in recipes. This makes them significantly more robust than scraping websites.
+1. Rewrote most existing recipes to take advantage of this (were available).
+1. Normalized recipes to inlcude 3 deployment rings (test, pilot, general availability)
+1. Weeded out some obsole products
+1. Added helper functions to interact with the Winget repo and to scaffold new recipes
 
 ### Enabling the Packaging of Microsoft Surface Device Drivers and Firmware
 
@@ -33,9 +41,9 @@ Feel free to create your own Recipes, Contribute to the main code, or provide fe
 ## Authors
 
 * **Andrew Jimenez** - *Main Author* - [asjimene](https://github.com/asjimene)
+* **Mirko Schnellbach** - *Fork Maintainer* - [4IoTMirko](https://github.com/4IoTMirko)
 
-See also the list of [contributors](https://github.com/asjimene/SCCM-Application-Packager/graphs/contributors) who participated in this project.
-
+See also the list of [contributors](https://github.com/4IoTGmbH/CMPackager/graphs/contributors) who participated in this project.
 
 ## Acknowledgments
 
