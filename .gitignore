@@ -16,3 +16,4 @@ Recipes/*
 .env
 ExtraFiles/.DS_Store
 .DS_Store
+.claude
