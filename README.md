@@ -10,11 +10,15 @@ This Application is a PowerShell Script that can be used to create applications 
 3. Check out the Recipes in the "Disabled" Folder, Modify them to your needs, and copy them into the "Recipes" Folder
 4. Run CMPackager.ps1 - Recipes in the "Recipes" folder will be packaged if required. Note that some packages require admin to be packaged (App is installed then uninstalled to grab version info)
 
-
 ### Prerequisites
 
 MEM ConfigMgr Console - Tested on SCCM 2509 - works best if the console has been opened at least once.
 
+### Enabling the Packaging of Microsoft Surface Device Drivers and Firmware
+
+1. Add the "MicrosoftSurfaceDrivers.xml" Recipe to the "Recipes" folder
+2. Navigate to ".\ExtraFiles\Scripts" and open "MicrosoftDrivers.csv", Remove any Drivers that you want packaged, All models currently supported by the script should already be there.
+3. Run CMPackager as usual, the first run will create the recipes and place them in the recipes folder, future runs will update the recipes and download the drivers.
 
 ## Fork specifics
 
@@ -24,19 +28,11 @@ MEM ConfigMgr Console - Tested on SCCM 2509 - works best if the console has been
 1. Weeded out some obsole products
 1. Added helper functions to interact with the Winget repo and to scaffold new recipes
 
-### Enabling the Packaging of Microsoft Surface Device Drivers and Firmware
-
-1. Add the "MicrosoftSurfaceDrivers.xml" Recipe to the "Recipes" folder
-2. Navigate to ".\ExtraFiles\Scripts" and open "MicrosoftDrivers.csv", Remove any Drivers that you want packaged, All models currently supported by the script should already be there.
-3. Run CMPackager as usual, the first run will create the recipes and place them in the recipes folder, future runs will update the recipes and download the drivers.
-
-
 ## Contributing
 
 Feel free to create your own Recipes, Contribute to the main code, or provide feedback!
 
 * If you have questions feel free to post an issue with the "Question" label here on GitHub, or ask me on Twitter (publicly is preferred, but I don't mind DMs)
-
 
 ## Authors
 
@@ -54,7 +50,6 @@ Used and Modified code from the following, Thanks to all for their work:
 * Jaap Brasser - [Get-ExtensionAttribute](http://www.jaapbrasser.com) 
 
 * Nickolaj Andersen - [Get-MSIInfo](http://www.scconfigmgr.com/2014/08/22/how-to-get-msi-file-information-with-powershell/)
-
 
 ## NOTE
 
