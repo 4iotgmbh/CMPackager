@@ -366,9 +366,8 @@ function Invoke-RecipeCommand {
         'exit /b %ERRORLEVEL%'
     ) | Set-Content -Path `$batchFile -Encoding ASCII
 
-    `$proc = Start-Process -FilePath 'cmd.exe' `
-        -ArgumentList ('/c "' + `$batchFile + '"') `
-        -Wait -PassThru -NoNewWindow
+    `$spArgs = @{ FilePath = 'cmd.exe'; ArgumentList = ('/c "' + `$batchFile + '"'); Wait = `$true; PassThru = `$true; NoNewWindow = `$true }
+    `$proc = Start-Process @spArgs
     Remove-Item `$batchFile -ErrorAction SilentlyContinue
     return `$proc.ExitCode
 }
