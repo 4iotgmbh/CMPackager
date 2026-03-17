@@ -359,11 +359,15 @@ function Invoke-RecipeCommand {
     Write-Log "Running: `$cmd"
 
     `$batchFile = [System.IO.Path]::Combine(`$env:TEMP, 'recipe_cmd.cmd')
-    "@echo off``r``ncd /d `"`$WorkingDir`"``r``n`$cmd``r``nexit /b %%ERRORLEVEL%%" |
-        Set-Content -Path `$batchFile -Encoding ASCII
+    @(
+        '@echo off',
+        ('cd /d "' + `$WorkingDir + '"'),
+        `$cmd,
+        'exit /b %ERRORLEVEL%'
+    ) | Set-Content -Path `$batchFile -Encoding ASCII
 
     `$proc = Start-Process -FilePath 'cmd.exe' `
-        -ArgumentList "/c `"`$batchFile`"" `
+        -ArgumentList ('/c "' + `$batchFile + '"') `
         -Wait -PassThru -NoNewWindow
     Remove-Item `$batchFile -ErrorAction SilentlyContinue
     return `$proc.ExitCode
@@ -469,7 +473,7 @@ function Test-DetectionClauses {
                             `$r.Detail += " | Version `$actualVer `$(if (`$versionOk) { 'satisfies' } else { 'does NOT satisfy' }) `$(`$clause.Operator) `$(`$clause.ExpectedValue)"
                             `$r.Detected = `$r.Detected -and `$versionOk
                         } else {
-                            `$r.Detail += " | Version `$actualVer (expected value is a placeholder — existence check only)"
+                            `$r.Detail += " | Version `$actualVer (expected value is a placeholder -- existence check only)"
                         }
                     }
                 }
@@ -498,7 +502,7 @@ function Test-DetectionClauses {
                                 `$r.Detail += " | Version `$actualVal `$(if (`$versionOk) { 'satisfies' } else { 'does NOT satisfy' }) `$(`$clause.Operator) `$(`$clause.ExpectedValue)"
                                 `$r.Detected = `$r.Detected -and `$versionOk
                             } else {
-                                `$r.Detail += " | (expected value is a placeholder — existence check only)"
+                                `$r.Detail += " | (expected value is a placeholder -- existence check only)"
                             }
                         }
                     }
