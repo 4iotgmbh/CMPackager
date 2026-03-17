@@ -78,7 +78,7 @@ param (
     [int]$TimeoutMinutes = 30
 )
 
-Set-StrictMode -Version Latest
+Set-StrictMode -Version 1
 $ErrorActionPreference = 'Stop'
 
 #region ── Helpers ──────────────────────────────────────────────────────────────
