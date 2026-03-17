@@ -466,7 +466,7 @@ function Test-DetectionClauses {
                         `$actualVer = (Get-Item `$fullPath -ErrorAction SilentlyContinue).VersionInfo.FileVersion
                         `$versionOk = Compare-Versions `$actualVer `$clause.ExpectedValue `$clause.Operator
                         if (`$null -ne `$versionOk) {
-                            `$r.Detail += " | Version `$actualVer $(if (`$versionOk) { 'satisfies' } else { 'does NOT satisfy' }) `$(`$clause.Operator) `$(`$clause.ExpectedValue)"
+                            `$r.Detail += " | Version `$actualVer `$(if (`$versionOk) { 'satisfies' } else { 'does NOT satisfy' }) `$(`$clause.Operator) `$(`$clause.ExpectedValue)"
                             `$r.Detected = `$r.Detected -and `$versionOk
                         } else {
                             `$r.Detail += " | Version `$actualVer (expected value is a placeholder — existence check only)"
@@ -495,7 +495,7 @@ function Test-DetectionClauses {
                         if (`$clause.CheckValue -eq 'True' -and `$clause.PropertyType -eq 'Version') {
                             `$versionOk = Compare-Versions ([string]`$actualVal) `$clause.ExpectedValue `$clause.Operator
                             if (`$null -ne `$versionOk) {
-                                `$r.Detail += " | Version `$(if (`$versionOk) { 'satisfies' } else { 'does NOT satisfy' }) `$(`$clause.Operator) `$(`$clause.ExpectedValue)"
+                                `$r.Detail += " | Version `$actualVal `$(if (`$versionOk) { 'satisfies' } else { 'does NOT satisfy' }) `$(`$clause.Operator) `$(`$clause.ExpectedValue)"
                                 `$r.Detected = `$r.Detected -and `$versionOk
                             } else {
                                 `$r.Detail += " | (expected value is a placeholder — existence check only)"
@@ -518,7 +518,7 @@ function Test-DetectionClauses {
                     `$r.Detail = "Could not determine MSI ProductCode"
                 } else {
                     `$r.Detected = Test-MSIProductCodeInstalled `$productCode
-                    `$r.Detail   = "MSI ProductCode `$productCode $(if (`$r.Detected) { 'found' } else { 'NOT found' }) in Uninstall registry"
+                    `$r.Detail   = "MSI ProductCode `$productCode `$(if (`$r.Detected) { 'found' } else { 'NOT found' }) in Uninstall registry"
                 }
             }
         }
@@ -562,7 +562,7 @@ try {
     `$results.InstallExitCode = `$exitCode
     # 0 = success, 3010 = success + reboot required, 1641 = success + reboot initiated
     `$results.InstallSuccess = `$exitCode -in @(0, 3010, 1641)
-    Write-Log "Install exit code: `$exitCode ($(if (`$results.InstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
+    Write-Log "Install exit code: `$exitCode (`$(if (`$results.InstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
 } catch {
     `$results.Notes += "Install exception: `$_"
     Write-Log "ERROR during install: `$_"
@@ -587,7 +587,7 @@ if ([string]::IsNullOrWhiteSpace(`$UninstallCmd)) {
         `$exitCode = Invoke-RecipeCommand -Command `$UninstallCmd
         `$results.UninstallExitCode = `$exitCode
         `$results.UninstallSuccess  = `$exitCode -in @(0, 3010, 1641)
-        Write-Log "Uninstall exit code: `$exitCode ($(if (`$results.UninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
+        Write-Log "Uninstall exit code: `$exitCode (`$(if (`$results.UninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
     } catch {
         `$results.Notes += "Uninstall exception: `$_"
         Write-Log "ERROR during uninstall: `$_"
