@@ -631,6 +631,15 @@ $innerScriptPath = Join-Path $WorkspacePath 'RunTest.ps1'
 $innerScript | Set-Content -Path $innerScriptPath -Encoding UTF8
 Write-Info "Generated: RunTest.ps1"
 
+# Generate a .cmd launcher so the LogonCommand does not rely on WSB honouring
+# the -ExecutionPolicy flag when invoking .ps1 files directly.
+$cmdLauncherPath = Join-Path $WorkspacePath 'Run.cmd'
+@"
+@echo off
+powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "C:\TestFiles\RunTest.ps1"
+"@ | Set-Content -Path $cmdLauncherPath -Encoding ASCII
+Write-Info "Generated: Run.cmd"
+
 #endregion
 
 #region ── Generate .wsb Config ──────────────────────────────────────────────────
@@ -647,7 +656,7 @@ $wsbContent = @"
     </MappedFolder>
   </MappedFolders>
   <LogonCommand>
-    <Command>powershell.exe -ExecutionPolicy Bypass -NonInteractive -WindowStyle Normal -File C:\TestFiles\RunTest.ps1</Command>
+    <Command>C:\TestFiles\Run.cmd</Command>
   </LogonCommand>
 </Configuration>
 "@
