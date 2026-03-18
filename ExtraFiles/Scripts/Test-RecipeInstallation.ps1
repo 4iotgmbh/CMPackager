@@ -545,6 +545,21 @@ function Test-DetectionClauses {
 Write-Log "=== Test starting: `$AppName / `$DepTypeName ==="
 Set-Location 'C:\TestFiles'
 
+# Wait for the Windows desktop shell to finish loading.
+# The LogonCommand in WSB fires before explorer.exe and many services are ready.
+# Attempting a MSI install before the system is settled causes the installer
+# service to stall silently. Polling for explorer.exe is a reliable signal that
+# the shell -- and the Windows Installer service -- are available.
+Write-Log "Waiting for system to be ready (explorer.exe)..."
+`$wsWaitSecs = 0
+while (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue) -and `$wsWaitSecs -lt 120) {
+    Start-Sleep -Seconds 3
+    `$wsWaitSecs += 3
+}
+Write-Log "explorer.exe detected after `${wsWaitSecs}s -- adding 10s buffer for services..."
+Start-Sleep -Seconds 10
+Write-Log "System ready."
+
 `$results = [ordered]@{
     Application          = `$AppName
     DeploymentType       = `$DepTypeName
