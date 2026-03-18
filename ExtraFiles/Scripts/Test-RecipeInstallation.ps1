@@ -404,24 +404,15 @@ function Wait-MsiInstallerEvent {
 # ── Extract ProductCode from an MSI file (COM) ───────────────
 function Get-MSIProductCode {
     param([string]`$MsiPath)
-    # Copy to a local temp path first — Windows Installer COM may refuse to open
-    # files on mapped/shared folders (C:\TestFiles is a sandbox share)
-    `$tempMsi = [System.IO.Path]::Combine(`$env:TEMP, [System.IO.Path]::GetFileName(`$MsiPath))
-    try {
-        Copy-Item `$MsiPath `$tempMsi -Force -ErrorAction Stop
-    } catch {
-        Write-Log "WARNING: Could not copy MSI to temp: `$_"
-        `$tempMsi = `$MsiPath  # fall back to original path
-    }
     try {
         `$installer = New-Object -ComObject WindowsInstaller.Installer
         `$db = `$installer.GetType().InvokeMember(
             'OpenDatabase', 'InvokeMethod', `$null, `$installer,
-            @(`$tempMsi, 0))
+            @(`$MsiPath, 0))
         `$view = `$db.GetType().InvokeMember(
             'OpenView', 'InvokeMethod', `$null, `$db,
             @("SELECT Value FROM Property WHERE Property='ProductCode'"))
-        `$view.GetType().InvokeMember('Execute', 'InvokeMethod', `$null, `$view, `$null)
+        `$view.GetType().InvokeMember('Execute', 'InvokeMethod', `$null, `$view, `$null) | Out-Null
         `$record = `$view.GetType().InvokeMember('Fetch', 'InvokeMethod', `$null, `$view, `$null)
         if (`$null -eq `$record) {
             Write-Log "WARNING: MSI Property table returned no ProductCode row"
@@ -431,8 +422,6 @@ function Get-MSIProductCode {
     } catch {
         Write-Log "WARNING: Could not read ProductCode from MSI: `$_"
         return `$null
-    } finally {
-        if (`$tempMsi -ne `$MsiPath) { Remove-Item `$tempMsi -ErrorAction SilentlyContinue }
     }
 }
 
