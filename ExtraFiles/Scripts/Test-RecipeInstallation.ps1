@@ -404,20 +404,31 @@ function Wait-MsiInstallerEvent {
 # ── Extract ProductCode from an MSI file (COM) ───────────────
 function Get-MSIProductCode {
     param([string]`$MsiPath)
+    # Copy to a local temp path first — Windows Installer COM may refuse to open
+    # files on mapped/shared folders (C:\TestFiles is a sandbox share)
+    `$tempMsi = [System.IO.Path]::Combine(`$env:TEMP, [System.IO.Path]::GetFileName(`$MsiPath))
+    try {
+        Copy-Item `$MsiPath `$tempMsi -Force -ErrorAction Stop
+    } catch {
+        Write-Log "WARNING: Could not copy MSI to temp: `$_"
+        `$tempMsi = `$MsiPath  # fall back to original path
+    }
     try {
         `$installer = New-Object -ComObject WindowsInstaller.Installer
-        `$db = `$installer.GetType().InvokeMember(
-            'OpenDatabase', 'InvokeMethod', `$null, `$installer,
-            @(`$MsiPath, 0))
-        `$view = `$db.GetType().InvokeMember(
-            'OpenView', 'InvokeMethod', `$null, `$db,
-            @("SELECT Value FROM Property WHERE Property='ProductCode'"))
-        `$view.GetType().InvokeMember('Execute', 'InvokeMethod', `$null, `$view, `$null)
-        `$record = `$view.GetType().InvokeMember('Fetch', 'InvokeMethod', `$null, `$view, `$null)
-        return `$record.GetType().InvokeMember('StringData', 'GetProperty', `$null, `$record, @(1))
+        `$db        = `$installer.OpenDatabase(`$tempMsi, 0)
+        `$view      = `$db.OpenView("SELECT Value FROM Property WHERE Property='ProductCode'")
+        `$view.Execute()
+        `$record    = `$view.Fetch()
+        if (`$null -eq `$record) {
+            Write-Log "WARNING: MSI Property table returned no ProductCode row"
+            return `$null
+        }
+        return `$record.StringData(1)
     } catch {
         Write-Log "WARNING: Could not read ProductCode from MSI: `$_"
         return `$null
+    } finally {
+        if (`$tempMsi -ne `$MsiPath) { Remove-Item `$tempMsi -ErrorAction SilentlyContinue }
     }
 }
 
@@ -544,7 +555,8 @@ function Test-DetectionClauses {
                     # Extract from MSI file
                     `$msiFullPath = "C:\TestFiles\`$(`$clause.InstallerFile)"
                     Write-Log "Extracting ProductCode from `$msiFullPath"
-                    `$productCode = (Get-MSIProductCode `$msiFullPath).Trim()
+                    `$pc = Get-MSIProductCode `$msiFullPath
+                    `$productCode = if (`$null -ne `$pc) { `$pc.Trim() } else { '' }
                 }
 
                 if ([string]::IsNullOrWhiteSpace(`$productCode)) {
