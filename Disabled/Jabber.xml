@@ -48,7 +48,7 @@
 				<DetectionClause>
 					<DetectionClauseType>File</DetectionClauseType>
 					<Name>CiscoJabber.exe</Name>
-					<Path>%ProgramFiles%\Cisco Systems\Cisco Jabber</Path>
+					<Path>%ProgramFiles(x86)%\Cisco Systems\Cisco Jabber</Path>
 					<PropertyType>Version</PropertyType>
 					<ExpectedValue>$Version</ExpectedValue>
 					<ExpressionOperator>GreaterEquals</ExpressionOperator>
