@@ -415,15 +415,19 @@ function Get-MSIProductCode {
     }
     try {
         `$installer = New-Object -ComObject WindowsInstaller.Installer
-        `$db        = `$installer.OpenDatabase(`$tempMsi, 0)
-        `$view      = `$db.OpenView("SELECT Value FROM Property WHERE Property='ProductCode'")
-        `$view.Execute()
-        `$record    = `$view.Fetch()
+        `$db = `$installer.GetType().InvokeMember(
+            'OpenDatabase', 'InvokeMethod', `$null, `$installer,
+            @(`$tempMsi, 0))
+        `$view = `$db.GetType().InvokeMember(
+            'OpenView', 'InvokeMethod', `$null, `$db,
+            @("SELECT Value FROM Property WHERE Property='ProductCode'"))
+        `$view.GetType().InvokeMember('Execute', 'InvokeMethod', `$null, `$view, `$null)
+        `$record = `$view.GetType().InvokeMember('Fetch', 'InvokeMethod', `$null, `$view, `$null)
         if (`$null -eq `$record) {
             Write-Log "WARNING: MSI Property table returned no ProductCode row"
             return `$null
         }
-        return `$record.StringData(1)
+        return `$record.GetType().InvokeMember('StringData', 'GetProperty', `$null, `$record, @(1))
     } catch {
         Write-Log "WARNING: Could not read ProductCode from MSI: `$_"
         return `$null
