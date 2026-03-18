@@ -350,7 +350,7 @@ function Write-Log {
 function Invoke-RecipeCommand {
     param(
         [string]`$Command,
-        [string]`$WorkingDir = 'C:\TestFiles'
+        [string]`$WorkingDir = 'C:\Temp\CMPackagerTest'
     )
     # Unescape PowerShell backtick-quotes used in recipe XML
     `$cmd = `$Command -replace '``"', '"'
@@ -545,26 +545,22 @@ function Test-DetectionClauses {
 Write-Log "=== Test starting: `$AppName / `$DepTypeName ==="
 Set-Location 'C:\TestFiles'
 
-# Wait for the Windows desktop shell and services to be fully ready.
-# WSB LogonCommand fires before explorer.exe and Windows Installer are ready.
-# Strategy: wait for explorer.exe (shell loaded), then hold for a fixed buffer
-# so that background services -- including Windows Installer -- have time to
-# settle. Measured startup time in WSB is ~3.5 min; 4 min total is used here.
-# The script records the start time so the buffer accounts for however long
-# the explorer.exe poll itself took.
-`$scriptStart = Get-Date
-Write-Log "Waiting for explorer.exe to signal shell load..."
-`$wsWaitSecs = 0
-while (-not (Get-Process -Name explorer -ErrorAction SilentlyContinue) -and `$wsWaitSecs -lt 180) {
-    Start-Sleep -Seconds 3
-    `$wsWaitSecs += 3
-}
-Write-Log "explorer.exe detected after `${wsWaitSecs}s."
-`$elapsedSinceStart = [int]([datetime]::Now - `$scriptStart).TotalSeconds
-`$remainingBuffer   = [math]::Max(0, 240 - `$elapsedSinceStart)
-Write-Log "Total elapsed: `${elapsedSinceStart}s. Holding `${remainingBuffer}s more to reach 4-minute mark..."
-if (`$remainingBuffer -gt 0) { Start-Sleep -Seconds `$remainingBuffer }
+# Brief pause for the sandbox to finish its own startup sequence.
+# The Windows Installer service (msiserver) starts independently of the shell
+# and is available well before explorer.exe. A short fixed wait is sufficient.
+Write-Log "Waiting 15s for sandbox startup to settle..."
+Start-Sleep -Seconds 15
 Write-Log "System ready."
+
+# Copy the installer to a fully local directory.
+# The mapped folder C:\TestFiles is accessible to the logged-in user process
+# but NOT to the Windows Installer service (msiserver), which runs as SYSTEM.
+# SYSTEM cannot read from the WSB mapped share, causing msiexec to abort
+# silently after "File will have security applied from OpCode."
+`$localWorkDir = 'C:\Temp\CMPackagerTest'
+New-Item -ItemType Directory -Path `$localWorkDir -Force | Out-Null
+Copy-Item -Path "C:\TestFiles\`$InstallerFile" -Destination "`$localWorkDir\`$InstallerFile" -Force
+Write-Log "Installer copied to local dir: `$localWorkDir\`$InstallerFile"
 
 `$results = [ordered]@{
     Application          = `$AppName
