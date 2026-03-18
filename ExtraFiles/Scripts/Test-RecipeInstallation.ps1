@@ -683,7 +683,16 @@ Write-Log "=== Overall result: `$(`$results.OverallResult) ==="
 `$results | ConvertTo-Json -Depth 10 | Set-Content -Path `$ResultsPath -Encoding UTF8
 Write-Log "Results written to `$ResultsPath"
 
-# ── 7. Shut down sandbox ─────────────────────────────────────
+# ── 7. Copy installer logs to mapped folder ──────────────────
+foreach (`$logName in @('install.log', 'uninstall.log')) {
+    `$src = Join-Path 'C:\Temp\CMPackagerTest' `$logName
+    if (Test-Path `$src) {
+        Copy-Item `$src 'C:\TestFiles\' -Force -ErrorAction SilentlyContinue
+        Write-Log "Copied `$logName to C:\TestFiles\"
+    }
+}
+
+# ── 8. Shut down sandbox ─────────────────────────────────────
 Write-Log "Shutting down sandbox..."
 Start-Sleep -Seconds 2
 & shutdown /s /t 0
@@ -842,6 +851,12 @@ if (Test-Path $sandboxLog) {
     Write-Info "Sandbox log: $sandboxLog"
 }
 Write-Info "Results JSON: $resultsFile"
+foreach ($logName in @('install.log', 'uninstall.log')) {
+    $logPath = Join-Path $WorkspacePath $logName
+    if (Test-Path $logPath) {
+        Write-Info "${logName}: $logPath"
+    }
+}
 Write-Host ""
 
 #endregion
