@@ -599,7 +599,7 @@ try {
 Write-Log "Waiting for msiexec to finish..."
 `$msiPollTimeout = (Get-Date).AddMinutes(5)
 while ((Get-Date) -lt `$msiPollTimeout) {
-    `$running = Get-Process -Name msiexec -ErrorAction SilentlyContinue | Where-Object { `$_.SessionId -eq 0 -or `$_.MainWindowHandle -ne 0 }
+    `$running = Get-Process -Name msiexec -ErrorAction SilentlyContinue
     if (-not `$running) { break }
     Write-Log "  msiexec still running -- waiting 5s..."
     Start-Sleep -Seconds 5
@@ -632,7 +632,7 @@ if ([string]::IsNullOrWhiteSpace(`$UninstallCmd)) {
     Write-Log "Waiting for msiexec to finish..."
     `$msiPollTimeout = (Get-Date).AddMinutes(5)
     while ((Get-Date) -lt `$msiPollTimeout) {
-        `$running = Get-Process -Name msiexec -ErrorAction SilentlyContinue | Where-Object { `$_.SessionId -eq 0 -or `$_.MainWindowHandle -ne 0 }
+        `$running = Get-Process -Name msiexec -ErrorAction SilentlyContinue
         if (-not `$running) { break }
         Write-Log "  msiexec still running -- waiting 5s..."
         Start-Sleep -Seconds 5
