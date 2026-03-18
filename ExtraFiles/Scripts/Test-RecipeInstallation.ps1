@@ -170,7 +170,7 @@ Write-Info "Detection method: $detMethodType"
 # Build the install command
 if ([string]::IsNullOrWhiteSpace($installProgram)) {
     if ($installType -eq 'MSI' -and -not [string]::IsNullOrWhiteSpace($installationMSI)) {
-        $installProgram = "msiexec.exe /i `"$installationMSI`" /qn /norestart /l*v install.log"
+        $installProgram = "msiexec.exe /i `"$installationMSI`" /qn /l*v install.log"
     } else {
         Write-Error "No InstallProgram and no InstallationMSI found for deployment type '$depTypeName'."
         exit 1
@@ -180,7 +180,7 @@ if ([string]::IsNullOrWhiteSpace($installProgram)) {
 # Build uninstall command fallback for pure MSI types
 if ([string]::IsNullOrWhiteSpace($uninstallCmd)) {
     if ($installType -eq 'MSI' -and -not [string]::IsNullOrWhiteSpace($installationMSI)) {
-        $uninstallCmd = "msiexec.exe /x `"$installationMSI`" /qn /norestart /l*v uninstall.log"
+        $uninstallCmd = "msiexec.exe /x `"$installationMSI`" /qn /l*v uninstall.log"
         Write-Info "No UninstallCmd in recipe; will use: $uninstallCmd"
     } else {
         Write-Warning "No uninstall command found. Uninstall step will be skipped."
