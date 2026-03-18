@@ -378,6 +378,29 @@ function Invoke-RecipeCommand {
     return `$exitCode
 }
 
+# ── Wait for MsiInstaller Application Event Log entry ────────
+# EventID 1033 = install completed, 1034 = uninstall completed
+function Wait-MsiInstallerEvent {
+    param(
+        [string]`$ProductName,
+        [datetime]`$After,
+        [int[]]`$EventIds,
+        [int]`$TimeoutMinutes = 20
+    )
+    Write-Log "Waiting for MsiInstaller event (IDs: `$(`$EventIds -join ',')) for product '`$ProductName'..."
+    `$deadline = (Get-Date).AddMinutes(`$TimeoutMinutes)
+    while ((Get-Date) -lt `$deadline) {
+        `$events = Get-EventLog -LogName Application -Source MsiInstaller -Newest 20 -ErrorAction SilentlyContinue |
+            Where-Object { `$_.TimeGenerated -gt `$After -and `$_.EventID -in `$EventIds -and `$_.Message -like "*`$ProductName*" }
+        if (`$events) {
+            Write-Log "  MsiInstaller event found (ID `$(`$events[0].EventID)) -- installer transaction complete."
+            return
+        }
+        Start-Sleep -Seconds 5
+    }
+    Write-Log "  WARNING: timed out waiting for MsiInstaller event after `$TimeoutMinutes minutes."
+}
+
 # ── Extract ProductCode from an MSI file (COM) ───────────────
 function Get-MSIProductCode {
     param([string]`$MsiPath)
@@ -521,7 +544,7 @@ function Test-DetectionClauses {
                     # Extract from MSI file
                     `$msiFullPath = "C:\TestFiles\`$(`$clause.InstallerFile)"
                     Write-Log "Extracting ProductCode from `$msiFullPath"
-                    `$productCode = Get-MSIProductCode `$msiFullPath
+                    `$productCode = (Get-MSIProductCode `$msiFullPath).Trim()
                 }
 
                 if ([string]::IsNullOrWhiteSpace(`$productCode)) {
@@ -585,6 +608,7 @@ Write-Log "Installer copied to local dir: `$localWorkDir\`$InstallerFile"
 # ── 1. Install ───────────────────────────────────────────────
 Write-Log "--- Step 1: Install ---"
 try {
+    `$installStart = Get-Date
     `$exitCode = Invoke-RecipeCommand -Command `$InstallCmd
     `$results.InstallExitCode = `$exitCode
     # 0 = success, 3010 = success + reboot required, 1641 = success + reboot initiated
@@ -595,15 +619,9 @@ try {
     Write-Log "ERROR during install: `$_"
 }
 
-# Wait for all msiexec processes to finish (client exits before server completes)
-Write-Log "Waiting for msiexec to finish..."
-`$msiPollTimeout = (Get-Date).AddMinutes(5)
-while ((Get-Date) -lt `$msiPollTimeout) {
-    `$running = Get-Process -Name msiexec -ErrorAction SilentlyContinue
-    if (-not `$running) { break }
-    Write-Log "  msiexec still running -- waiting 5s..."
-    Start-Sleep -Seconds 5
-}
+# Wait for MsiInstaller event 1033 (install completed) in Application Event Log
+if (`$null -eq `$installStart) { `$installStart = (Get-Date).AddMinutes(-1) }
+Wait-MsiInstallerEvent -ProductName `$AppName -After `$installStart -EventIds @(1033)
 Start-Sleep -Seconds 3
 
 # ── 2. Detect after install ──────────────────────────────────
@@ -619,6 +637,7 @@ if ([string]::IsNullOrWhiteSpace(`$UninstallCmd)) {
     Write-Log "No uninstall command configured -- skipping"
 } else {
     try {
+        `$uninstallStart = Get-Date
         `$exitCode = Invoke-RecipeCommand -Command `$UninstallCmd
         `$results.UninstallExitCode = `$exitCode
         `$results.UninstallSuccess  = `$exitCode -in @(0, 3010, 1641)
@@ -628,15 +647,9 @@ if ([string]::IsNullOrWhiteSpace(`$UninstallCmd)) {
         Write-Log "ERROR during uninstall: `$_"
     }
 
-    # Wait for all msiexec processes to finish after uninstall
-    Write-Log "Waiting for msiexec to finish..."
-    `$msiPollTimeout = (Get-Date).AddMinutes(5)
-    while ((Get-Date) -lt `$msiPollTimeout) {
-        `$running = Get-Process -Name msiexec -ErrorAction SilentlyContinue
-        if (-not `$running) { break }
-        Write-Log "  msiexec still running -- waiting 5s..."
-        Start-Sleep -Seconds 5
-    }
+    # Wait for MsiInstaller event 1034 (uninstall completed) in Application Event Log
+    if (`$null -eq `$uninstallStart) { `$uninstallStart = (Get-Date).AddMinutes(-1) }
+    Wait-MsiInstallerEvent -ProductName `$AppName -After `$uninstallStart -EventIds @(1034)
     Start-Sleep -Seconds 3
 }
 
