@@ -152,12 +152,12 @@ foreach ($recipeFile in $recipeFiles) {
     $testStart  = Get-Date
     $extraNotes = ''
 
-    $testArgs = @(
-        '-RecipePath',      $recipeFile.FullName
-        '-WorkspacePath',   $workspace
-        '-TimeoutMinutes',  $TimeoutMinutes
-    )
-    if (-not $KeepInstallers) { $testArgs += '-CleanupInstaller' }
+    $testArgs = @{
+        RecipePath     = $recipeFile.FullName
+        WorkspacePath  = $workspace
+        TimeoutMinutes = $TimeoutMinutes
+    }
+    if (-not $KeepInstallers) { $testArgs['CleanupInstaller'] = $true }
 
     try {
         & $testScript @testArgs
