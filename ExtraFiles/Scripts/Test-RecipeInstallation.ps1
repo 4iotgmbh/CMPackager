@@ -211,6 +211,13 @@ $installerFileName = if ($linkedDownload -and -not [string]::IsNullOrWhiteSpace(
     'installer'
 }
 
+# TODO: support ExtraCopyFunctions by staging the extra files into the sandbox workspace.
+#       Until then, recipes that use it cannot be tested reliably and are skipped.
+if ($linkedDownload -and -not [string]::IsNullOrWhiteSpace($linkedDownload.ExtraCopyFunctions)) {
+    Write-Warning "Recipe '$appName' uses ExtraCopyFunctions, which is not yet supported by this tester. Skipping."
+    exit 2
+}
+
 #endregion
 
 #region ── Resolve Installer File ────────────────────────────────────────────────

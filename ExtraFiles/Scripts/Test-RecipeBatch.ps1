@@ -120,8 +120,9 @@ foreach ($recipeFile in $recipeFiles) {
 
     # ── Parse recipe for display ───────────────────────────────────────────────
 
-    $appName   = $recipeFile.BaseName
+    $appName     = $recipeFile.BaseName
     $depTypeName = ''
+    $xml         = $null
     try {
         [xml]$xml = Get-Content $recipeFile.FullName -Raw
         if ($xml.ApplicationDef.Application.Name) {
@@ -141,6 +142,7 @@ foreach ($recipeFile in $recipeFiles) {
     Write-Host "  $indexLabel $appName" -ForegroundColor Cyan
     Write-Host "  Recipe: $($recipeFile.Name)" -ForegroundColor DarkGray
     Write-Host ''
+
 
     # ── Per-test workspace ─────────────────────────────────────────────────────
 
