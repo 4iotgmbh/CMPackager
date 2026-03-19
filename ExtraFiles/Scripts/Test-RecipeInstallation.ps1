@@ -822,15 +822,21 @@ Write-Info "The sandbox will shut down when the test completes."
 Write-Info "Timeout: $TimeoutMinutes minutes"
 Write-Host ""
 
-Start-Process -FilePath $sandboxPath -ArgumentList $wsbPath
+$sandboxProc = Start-Process -FilePath $sandboxPath -ArgumentList $wsbPath -PassThru
 
-# Poll for results file
-$deadline = (Get-Date).AddMinutes($TimeoutMinutes)
-$dotCount  = 0
+# Poll for results file, aborting early if the sandbox process exits unexpectedly
+$deadline      = (Get-Date).AddMinutes($TimeoutMinutes)
+$dotCount      = 0
+$sandboxAborted = $false
 Write-Host "  Waiting for results" -NoNewline -ForegroundColor Cyan
 
 while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 5
+    if ($sandboxProc.HasExited) {
+        # Sandbox closed before writing results — no point waiting further
+        $sandboxAborted = $true
+        break
+    }
     Write-Host '.' -NoNewline -ForegroundColor Cyan
     $dotCount++
     if ($dotCount % 12 -eq 0) {
@@ -840,12 +846,26 @@ while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
 }
 Write-Host ""
 
-if (-not (Test-Path $resultsFile)) {
+# Force-close the sandbox if it is still running (test completed, timed out, or aborted)
+if (-not $sandboxProc.HasExited) {
+    Stop-Process -Id $sandboxProc.Id -Force -ErrorAction SilentlyContinue
+}
+
+if ($sandboxAborted) {
+    Write-Host "`n══════════════════════════════════════" -ForegroundColor White
+    Write-Host "  SANDBOX CLOSED UNEXPECTEDLY" -ForegroundColor Red
+    Write-Host "══════════════════════════════════════`n" -ForegroundColor White
+    Write-Host "  The sandbox process exited before the test completed." -ForegroundColor Yellow
+    Write-Host "  Check the log for the last known state:`n" -ForegroundColor Yellow
+} elseif (-not (Test-Path $resultsFile)) {
     Write-Host "`n══════════════════════════════════════" -ForegroundColor White
     Write-Host "  TIMED OUT after $TimeoutMinutes minutes" -ForegroundColor Red
     Write-Host "══════════════════════════════════════`n" -ForegroundColor White
     Write-Host "  The sandbox did not produce a results file within the allowed time." -ForegroundColor Yellow
-    Write-Host "  The sandbox may still be running. Check the log for the last known state:`n" -ForegroundColor Yellow
+    Write-Host "  Check the log for the last known state:`n" -ForegroundColor Yellow
+}
+
+if ($sandboxAborted -or -not (Test-Path $resultsFile)) {
     $sandboxLog = Join-Path $WorkspacePath 'sandbox.log'
     if (Test-Path $sandboxLog) {
         Write-Info "Sandbox log: $sandboxLog"
