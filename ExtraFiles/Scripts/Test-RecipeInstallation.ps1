@@ -216,7 +216,8 @@ $installerFileName = if ($linkedDownload -and -not [string]::IsNullOrWhiteSpace(
 #region ── Resolve Installer File ────────────────────────────────────────────────
 
 if ($PSBoundParameters.ContainsKey('InstallerPath')) {
-    Write-Step "Using provided installer: $InstallerPath"
+    $resolvedInstallerPath = $InstallerPath
+    Write-Step "Using provided installer: $resolvedInstallerPath"
 } else {
     $directUrl     = if ($linkedDownload) { $linkedDownload.URL }           else { $null }
     $prefetchScript = if ($linkedDownload) { $linkedDownload.PrefetchScript } else { $null }
@@ -280,14 +281,14 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
     # Download to a local temp directory; the workspace copy step will place it in the shared folder
     $downloadDir = Join-Path $env:TEMP 'CMPackagerDownload'
     New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
-    $InstallerPath = Join-Path $downloadDir $installerFileName
+    $resolvedInstallerPath = Join-Path $downloadDir $installerFileName
 
-    Write-Info "Downloading to: $InstallerPath"
+    Write-Info "Downloading to: $resolvedInstallerPath"
     try {
         $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $resolvedUrl -OutFile $InstallerPath -UseBasicParsing -ErrorAction Stop
+        Invoke-WebRequest -Uri $resolvedUrl -OutFile $resolvedInstallerPath -UseBasicParsing -ErrorAction Stop
         $ProgressPreference = 'Continue'
-        Write-Info "Download complete: $([math]::Round((Get-Item $InstallerPath).Length / 1MB, 1)) MB"
+        Write-Info "Download complete: $([math]::Round((Get-Item $resolvedInstallerPath).Length / 1MB, 1)) MB"
     } catch {
         Write-Error "Failed to download installer from $resolvedUrl`: $_"
         exit 1
@@ -373,7 +374,7 @@ New-Item -ItemType Directory -Path $WorkspacePath -Force | Out-Null
 
 # Copy installer into workspace
 $sandboxInstallerPath = Join-Path $WorkspacePath $installerFileName
-Copy-Item -Path $InstallerPath -Destination $sandboxInstallerPath -Force
+Copy-Item -Path $resolvedInstallerPath -Destination $sandboxInstallerPath -Force
 Write-Info "Copied installer: $installerFileName"
 
 #endregion
