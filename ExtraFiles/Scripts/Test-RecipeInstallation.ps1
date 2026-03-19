@@ -17,7 +17,7 @@
         (Settings > Optional Features > Windows Sandbox)
       - Run this script on a Windows host (not on macOS/Linux)
       - Installer file must be provided via -InstallerPath, or the recipe must contain
-        a plain <URL> element (not a PrefetchScript) so it can be downloaded automatically
+        a <URL> or <PrefetchScript> element so the installer can be downloaded automatically
 
 .PARAMETER RecipePath
     Path to the CMPackager recipe XML file to test.
@@ -28,8 +28,12 @@
 
 .PARAMETER InstallerPath
     Path to the already-downloaded installer file on the host.
-    Required when the recipe download uses a <PrefetchScript> block.
-    If omitted and the recipe has a direct <URL>, the installer is downloaded automatically.
+    If omitted, the installer is downloaded automatically using the recipe's <URL> or
+    <PrefetchScript>. The downloaded file is placed in the sandbox workspace folder.
+
+.PARAMETER CleanupInstaller
+    Delete the installer file from the workspace after the test completes.
+    Useful when downloading automatically to avoid leaving large files behind.
 
 .PARAMETER WorkspacePath
     Host folder used as the sandbox mapped drive.
@@ -45,7 +49,10 @@
 
 .EXAMPLE
     .\Test-RecipeInstallation.ps1 -RecipePath "..\..\Disabled\MozillaFirefox.xml" `
-        -InstallerPath "C:\Temp\Firefoxx64.msi" -DeploymentTypeName "DeploymentType1"
+        -DeploymentTypeName "DeploymentType1"
+
+.EXAMPLE
+    .\Test-RecipeInstallation.ps1 -RecipePath "..\..\Disabled\VLC.xml" -CleanupInstaller
 
 .NOTES
     Author: CMPackager project — ExtraFiles\Scripts
@@ -75,7 +82,10 @@ param (
     [string]$WorkspacePath = (Join-Path $env:TEMP "CMPackagerSandboxTest"),
 
     [Parameter(Mandatory = $false)]
-    [int]$TimeoutMinutes = 30
+    [int]$TimeoutMinutes = 30,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$CleanupInstaller
 )
 
 Set-StrictMode -Version 1
@@ -208,28 +218,78 @@ $installerFileName = if ($linkedDownload -and -not [string]::IsNullOrWhiteSpace(
 if ($PSBoundParameters.ContainsKey('InstallerPath')) {
     Write-Step "Using provided installer: $InstallerPath"
 } else {
-    # Try to download from direct <URL> in the recipe
-    $directUrl = if ($linkedDownload) { $linkedDownload.URL } else { $null }
-    if ([string]::IsNullOrWhiteSpace($directUrl)) {
-        Write-Error @"
-No -InstallerPath provided and no direct <URL> found in the recipe download block.
-This recipe uses a <PrefetchScript> to determine the URL at runtime.
-Please run CMPackager or the PrefetchScript manually to download the installer,
-then provide the path via -InstallerPath.
-"@
+    $directUrl     = if ($linkedDownload) { $linkedDownload.URL }           else { $null }
+    $prefetchScript = if ($linkedDownload) { $linkedDownload.PrefetchScript } else { $null }
+
+    # Resolve a download URL — either directly from <URL> or by running <PrefetchScript>
+    $resolvedUrl = $null
+
+    if (-not [string]::IsNullOrWhiteSpace($directUrl)) {
+        $resolvedUrl = $directUrl.Trim()
+        Write-Step "Downloading installer from recipe URL: $resolvedUrl"
+
+    } elseif (-not [string]::IsNullOrWhiteSpace($prefetchScript)) {
+        Write-Step "Resolving installer URL via PrefetchScript..."
+
+        # Load Get-InstallerURLfromWinget from CMPackager.ps1 so PrefetchScripts can call it
+        $cmPackagerPath = Join-Path $PSScriptRoot '..' '..' 'CMPackager.ps1'
+        $cmPackagerPath = [System.IO.Path]::GetFullPath($cmPackagerPath)
+        if (Test-Path $cmPackagerPath) {
+            try {
+                $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+                    $cmPackagerPath, [ref]$null, [ref]$null)
+                $funcDef = $ast.FindAll({
+                    $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                    $args[0].Name -eq 'Get-InstallerURLfromWinget'
+                }, $false) | Select-Object -First 1
+                if ($funcDef) {
+                    Invoke-Expression $funcDef.Extent.Text
+                    Write-Info "Loaded Get-InstallerURLfromWinget from CMPackager.ps1"
+                } else {
+                    Write-Warning "Get-InstallerURLfromWinget not found in CMPackager.ps1 — PrefetchScript may fail"
+                }
+            } catch {
+                Write-Warning "Could not parse CMPackager.ps1: $_ — PrefetchScript may fail"
+            }
+        } else {
+            Write-Warning "CMPackager.ps1 not found at $cmPackagerPath — PrefetchScript may fail"
+        }
+
+        # Execute PrefetchScript — it is expected to set $URL in the current scope
+        $URL = $null
+        try {
+            Invoke-Expression $prefetchScript | Out-Null
+        } catch {
+            Write-Error "PrefetchScript execution failed: $_"
+            exit 1
+        }
+
+        if ([string]::IsNullOrWhiteSpace($URL)) {
+            Write-Error "PrefetchScript did not produce a URL. Check the recipe's <PrefetchScript> block."
+            exit 1
+        }
+
+        $resolvedUrl = $URL.Trim()
+        Write-Info "PrefetchScript resolved URL: $resolvedUrl"
+
+    } else {
+        Write-Error "No -InstallerPath provided and the recipe has neither a <URL> nor a <PrefetchScript>."
         exit 1
     }
 
-    Write-Step "Downloading installer from: $directUrl"
+    # Download to a local temp directory; the workspace copy step will place it in the shared folder
     $downloadDir = Join-Path $env:TEMP 'CMPackagerDownload'
     New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
     $InstallerPath = Join-Path $downloadDir $installerFileName
 
+    Write-Info "Downloading to: $InstallerPath"
     try {
-        Invoke-WebRequest -Uri $directUrl -OutFile $InstallerPath -UseBasicParsing
-        Write-Info "Downloaded to: $InstallerPath"
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $resolvedUrl -OutFile $InstallerPath -UseBasicParsing -ErrorAction Stop
+        $ProgressPreference = 'Continue'
+        Write-Info "Download complete: $([math]::Round((Get-Item $InstallerPath).Length / 1MB, 1)) MB"
     } catch {
-        Write-Error "Failed to download installer: $_"
+        Write-Error "Failed to download installer from $resolvedUrl`: $_"
         exit 1
     }
 }
@@ -858,5 +918,13 @@ foreach ($logName in @('install.log', 'uninstall.log')) {
     }
 }
 Write-Host ""
+
+if ($CleanupInstaller) {
+    $installerInWorkspace = Join-Path $WorkspacePath $installerFileName
+    if (Test-Path $installerInWorkspace) {
+        Remove-Item $installerInWorkspace -Force
+        Write-Info "Installer removed: $installerInWorkspace"
+    }
+}
 
 #endregion
