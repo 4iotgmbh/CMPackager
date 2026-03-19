@@ -159,6 +159,20 @@ foreach ($recipeFile in $recipeFiles) {
     }
     if (-not $KeepInstallers) { $testArgs['CleanupInstaller'] = $true }
 
+    # Wait for any lingering sandbox processes from a previous test to exit
+    $sbWaitDeadline = (Get-Date).AddMinutes(3)
+    $sbWaitLogged   = $false
+    while ((Get-Date) -lt $sbWaitDeadline) {
+        $sbProcs = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
+        if (-not $sbProcs) { break }
+        if (-not $sbWaitLogged) {
+            Write-Host '  Waiting for previous sandbox to shut down...' -ForegroundColor DarkYellow
+            $sbWaitLogged = $true
+        }
+        Start-Sleep -Seconds 3
+    }
+    if ($sbWaitLogged) { Write-Host '' }
+
     try {
         & $testScript @testArgs
     } catch {
