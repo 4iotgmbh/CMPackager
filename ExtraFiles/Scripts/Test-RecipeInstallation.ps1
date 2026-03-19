@@ -394,6 +394,7 @@ $innerScript = @"
 `$AppName          = '$($appName -replace "'", "''")'
 `$DepTypeName      = '$depTypeName'
 `$InstallerFile    = '$installerFileName'
+`$InstallationType = '$installType'
 `$InstallCmd       = '$($installProgram -replace "'", "''" -replace '"', '`"')'
 `$UninstallCmd     = '$($uninstallCmd   -replace "'", "''" -replace '"', '`"')'
 `$DetectionClauses = $detectionArrayLiteral
@@ -685,9 +686,11 @@ try {
     Write-Log "ERROR during install: `$_"
 }
 
-# Wait for MsiInstaller event 1033 (install completed) in Application Event Log
-if (`$null -eq `$installStart) { `$installStart = (Get-Date).AddMinutes(-1) }
-Wait-MsiInstallerEvent -ProductName `$AppName -After `$installStart -EventIds @(1033)
+# MSI only: wait for Windows Installer to commit the transaction before detecting
+if (`$InstallationType -eq 'MSI') {
+    if (`$null -eq `$installStart) { `$installStart = (Get-Date).AddMinutes(-1) }
+    Wait-MsiInstallerEvent -ProductName `$AppName -After `$installStart -EventIds @(1033)
+}
 Start-Sleep -Seconds 3
 
 # ── 2. Detect after install ──────────────────────────────────
@@ -713,9 +716,11 @@ if ([string]::IsNullOrWhiteSpace(`$UninstallCmd)) {
         Write-Log "ERROR during uninstall: `$_"
     }
 
-    # Wait for MsiInstaller event 1034 (uninstall completed) in Application Event Log
-    if (`$null -eq `$uninstallStart) { `$uninstallStart = (Get-Date).AddMinutes(-1) }
-    Wait-MsiInstallerEvent -ProductName `$AppName -After `$uninstallStart -EventIds @(1034)
+    # MSI only: wait for Windows Installer to commit the transaction before detecting
+    if (`$InstallationType -eq 'MSI') {
+        if (`$null -eq `$uninstallStart) { `$uninstallStart = (Get-Date).AddMinutes(-1) }
+        Wait-MsiInstallerEvent -ProductName `$AppName -After `$uninstallStart -EventIds @(1034)
+    }
     Start-Sleep -Seconds 3
 }
 
