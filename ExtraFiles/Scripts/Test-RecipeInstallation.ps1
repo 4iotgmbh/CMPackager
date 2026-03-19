@@ -829,7 +829,28 @@ while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
 Write-Host ""
 
 if (-not (Test-Path $resultsFile)) {
-    Write-Error "Timed out after $TimeoutMinutes minutes. No results file found at: $resultsFile"
+    Write-Host "`n══════════════════════════════════════" -ForegroundColor White
+    Write-Host "  TIMED OUT after $TimeoutMinutes minutes" -ForegroundColor Red
+    Write-Host "══════════════════════════════════════`n" -ForegroundColor White
+    Write-Host "  The sandbox did not produce a results file within the allowed time." -ForegroundColor Yellow
+    Write-Host "  The sandbox may still be running. Check the log for the last known state:`n" -ForegroundColor Yellow
+    $sandboxLog = Join-Path $WorkspacePath 'sandbox.log'
+    if (Test-Path $sandboxLog) {
+        Write-Info "Sandbox log: $sandboxLog"
+        Write-Host ""
+        Write-Host "  Last 20 lines:" -ForegroundColor Gray
+        Get-Content $sandboxLog -Tail 20 | ForEach-Object { Write-Host "    $_" -ForegroundColor Gray }
+    } else {
+        Write-Host "  No sandbox.log found — the sandbox may not have started correctly." -ForegroundColor Red
+    }
+    foreach ($logName in @('install.log', 'uninstall.log')) {
+        $logPath = Join-Path $WorkspacePath $logName
+        if (Test-Path $logPath) {
+            Write-Host ""
+            Write-Info "${logName}: $logPath"
+        }
+    }
+    Write-Host ""
     exit 1
 }
 
