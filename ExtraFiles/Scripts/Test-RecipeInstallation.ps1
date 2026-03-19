@@ -823,25 +823,24 @@ Write-Host ""
 
 Start-Process -FilePath $sandboxPath -ArgumentList $wsbPath
 
-# Wait for sandbox VM processes to appear before starting to monitor them.
+# Poll for results file.
 # WindowsSandbox.exe is a launcher that exits immediately; the persistent host-side
 # processes are WindowsSandboxClient and WindowsSandbox (the container manager).
-$sbAppearDeadline = (Get-Date).AddSeconds(30)
-while ((Get-Date) -lt $sbAppearDeadline) {
-    if (Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue) { break }
-    Start-Sleep -Seconds 2
-}
-
-# Poll for results file, aborting early if sandbox processes disappear before results arrive
-$deadline       = (Get-Date).AddMinutes($TimeoutMinutes)
-$dotCount       = 0
-$sandboxAborted = $false
+# We only treat their absence as an abort once we have confirmed they were running —
+# this avoids false aborts while the sandbox is still starting up.
+$deadline         = (Get-Date).AddMinutes($TimeoutMinutes)
+$dotCount         = 0
+$sandboxEverSeen  = $false
+$sandboxAborted   = $false
 Write-Host "  Waiting for results" -NoNewline -ForegroundColor Cyan
 
 while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 5
-    if (-not (Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue)) {
-        # All sandbox processes gone but no results file — sandbox closed without completing
+    $sbRunning = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
+    if ($sbRunning) {
+        $sandboxEverSeen = $true
+    } elseif ($sandboxEverSeen) {
+        # Processes were running before but are now gone without a results file
         $sandboxAborted = $true
         break
     }
