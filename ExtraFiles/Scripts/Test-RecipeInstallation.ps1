@@ -134,7 +134,6 @@ Write-Host "`nCMPackager Recipe Installation Tester" -ForegroundColor White
 Write-Host "======================================`n" -ForegroundColor White
 
 # Check Windows Sandbox is available
-$sandboxExe = 'WindowsSandbox.exe'
 $sandboxPath = "$env:SystemRoot\System32\WindowsSandbox.exe"
 if (-not (Test-Path $sandboxPath)) {
     Write-Error @"
@@ -822,18 +821,27 @@ Write-Info "The sandbox will shut down when the test completes."
 Write-Info "Timeout: $TimeoutMinutes minutes"
 Write-Host ""
 
-$sandboxProc = Start-Process -FilePath $sandboxPath -ArgumentList $wsbPath -PassThru
+Start-Process -FilePath $sandboxPath -ArgumentList $wsbPath
 
-# Poll for results file, aborting early if the sandbox process exits unexpectedly
-$deadline      = (Get-Date).AddMinutes($TimeoutMinutes)
-$dotCount      = 0
+# Wait for sandbox VM processes to appear before starting to monitor them.
+# WindowsSandbox.exe is a launcher that exits immediately; the persistent host-side
+# processes are WindowsSandboxClient and WindowsSandbox (the container manager).
+$sbAppearDeadline = (Get-Date).AddSeconds(30)
+while ((Get-Date) -lt $sbAppearDeadline) {
+    if (Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue) { break }
+    Start-Sleep -Seconds 2
+}
+
+# Poll for results file, aborting early if sandbox processes disappear before results arrive
+$deadline       = (Get-Date).AddMinutes($TimeoutMinutes)
+$dotCount       = 0
 $sandboxAborted = $false
 Write-Host "  Waiting for results" -NoNewline -ForegroundColor Cyan
 
 while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 5
-    if ($sandboxProc.HasExited) {
-        # Sandbox closed before writing results — no point waiting further
+    if (-not (Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue)) {
+        # All sandbox processes gone but no results file — sandbox closed without completing
         $sandboxAborted = $true
         break
     }
@@ -846,16 +854,15 @@ while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
 }
 Write-Host ""
 
-# Force-close the sandbox if it is still running (test completed, timed out, or aborted)
-if (-not $sandboxProc.HasExited) {
-    Stop-Process -Id $sandboxProc.Id -Force -ErrorAction SilentlyContinue
-}
+# Force-close any remaining sandbox processes so the next test can start cleanly
+Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
 
 if ($sandboxAborted) {
     Write-Host "`n══════════════════════════════════════" -ForegroundColor White
     Write-Host "  SANDBOX CLOSED UNEXPECTEDLY" -ForegroundColor Red
     Write-Host "══════════════════════════════════════`n" -ForegroundColor White
-    Write-Host "  The sandbox process exited before the test completed." -ForegroundColor Yellow
+    Write-Host "  The sandbox exited before the test completed." -ForegroundColor Yellow
     Write-Host "  Check the log for the last known state:`n" -ForegroundColor Yellow
 } elseif (-not (Test-Path $resultsFile)) {
     Write-Host "`n══════════════════════════════════════" -ForegroundColor White
@@ -926,7 +933,7 @@ foreach ($cr in $detInstall.ClauseResults) {
 
 # Uninstall result
 Write-Host "`n  Uninstall" -ForegroundColor White
-if ($null -eq $results.UninstallExitCode -and $results.UninstallSuccess -eq $null) {
+if ($null -eq $results.UninstallExitCode -and $null -eq $results.UninstallSuccess) {
     Write-Host "    Skipped (no uninstall command configured)" -ForegroundColor Yellow
 } else {
     $uninstallColor = if ($results.UninstallSuccess) { 'Green' } else { 'Red' }
