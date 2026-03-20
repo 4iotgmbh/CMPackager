@@ -171,8 +171,8 @@ foreach ($recipeFile in $recipeFiles) {
     $sbWaitLogged   = $false
     while ((Get-Date) -lt $sbWaitDeadline) {
         $sandboxRunning = if ($useWsbCliLocal) {
-            $listOut = & $wsbCliPath list 2>&1
-            [bool]($listOut | Select-String -Pattern '[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}')
+            # wsb list outputs bare GUIDs (one per line) when sandboxes are running, empty otherwise
+            [bool]((& $wsbCliPath list 2>&1) | Where-Object { $_ -match '^[0-9a-fA-F]{8}-' })
         } else {
             [bool](Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue)
         }
