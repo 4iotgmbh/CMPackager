@@ -133,15 +133,28 @@ function Convert-HiveName {
 Write-Host "`nCMPackager Recipe Installation Tester" -ForegroundColor White
 Write-Host "======================================`n" -ForegroundColor White
 
-# Check Windows Sandbox is available
-$sandboxPath = "$env:SystemRoot\System32\WindowsSandbox.exe"
-if (-not (Test-Path $sandboxPath)) {
+# Detect wsb.exe (Windows 11 24H2+ CLI) vs WindowsSandbox.exe (legacy launcher).
+# wsb.exe lets us launch with a stable sandbox ID and stop it by ID — avoiding the
+# "only one instance" problem that plagues the legacy launcher path.
+$wsbCliPath    = "$env:SystemRoot\System32\wsb.exe"
+$wsbLaunchPath = "$env:SystemRoot\System32\WindowsSandbox.exe"
+$useWsbCli     = Test-Path $wsbCliPath
+
+if (-not $useWsbCli -and -not (Test-Path $wsbLaunchPath)) {
     Write-Error @"
-Windows Sandbox executable not found at: $sandboxPath
+Windows Sandbox not found.
+  Checked (24H2+ CLI)  : $wsbCliPath
+  Checked (legacy)     : $wsbLaunchPath
 Enable it via: Settings > Optional Features > Windows Sandbox
 (Requires Windows 10/11 Pro or Enterprise, build 18305+)
 "@
     exit 1
+}
+
+if ($useWsbCli) {
+    Write-Info "Sandbox control: wsb.exe CLI (Windows 11 24H2+)"
+} else {
+    Write-Info "Sandbox control: WindowsSandbox.exe (legacy mode)"
 }
 
 #endregion
@@ -813,57 +826,127 @@ Write-Info "Generated: SandboxTest.wsb"
 #region ── Launch Sandbox and Wait ───────────────────────────────────────────────
 
 $resultsFile = Join-Path $WorkspacePath 'results.json'
+$sandboxLog  = Join-Path $WorkspacePath 'sandbox.log'
 
 Write-Host "`n" -NoNewline
 Write-Step "Launching Windows Sandbox..."
-Write-Info "The sandbox window will open. A PowerShell window will run the test automatically."
-Write-Info "The sandbox will shut down when the test completes."
+Write-Info "The sandbox will run the test automatically and shut down when complete."
 Write-Info "Timeout: $TimeoutMinutes minutes"
 Write-Host ""
 
-Start-Process -FilePath $sandboxPath -ArgumentList $wsbPath
+$deadline    = (Get-Date).AddMinutes($TimeoutMinutes)
+$dotCount    = 0
+$sandboxId   = $null
+$exitedEarly = $false
+$timedOut    = $false
 
-# Poll for results file.
-# WindowsSandbox.exe is a launcher that exits immediately; the persistent host-side
-# processes are WindowsSandboxClient and WindowsSandbox (the container manager).
-# We only treat their absence as an abort once we have confirmed they were running —
-# this avoids false aborts while the sandbox is still starting up.
-$deadline         = (Get-Date).AddMinutes($TimeoutMinutes)
-$dotCount         = 0
-$sandboxEverSeen  = $false
-$sandboxAborted   = $false
-Write-Host "  Waiting for results" -NoNewline -ForegroundColor Cyan
+if ($useWsbCli) {
+    # ── wsb.exe path (Windows 11 24H2+) ─────────────────────────────────────────
+    # Stop any sandbox already running so we don't hit the "only one instance" limit.
+    $listBefore = & $wsbCliPath list 2>&1
+    $listBefore | Select-String -Pattern '[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}' |
+        ForEach-Object {
+            $staleId = $_.Matches[0].Value
+            Write-Info "Stopping stale sandbox $staleId before launch..."
+            & $wsbCliPath stop --id $staleId 2>&1 | Out-Null
+        }
+    # Wait briefly for stale instances to shut down
+    Start-Sleep -Seconds 3
 
-while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
-    Start-Sleep -Seconds 5
-    $sbRunning = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
-    if ($sbRunning) {
-        $sandboxEverSeen = $true
-    } elseif ($sandboxEverSeen) {
-        # Processes were running before but are now gone without a results file
-        $sandboxAborted = $true
-        break
+    # Launch and capture the assigned sandbox ID
+    $startOutput = & $wsbCliPath start --config $wsbPath 2>&1
+    $idMatch = [regex]::Match(($startOutput -join ' '), '[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}')
+    if ($idMatch.Success) {
+        $sandboxId = $idMatch.Value
+        Write-Info "Sandbox ID: $sandboxId"
+    } else {
+        Write-Warning "Could not parse sandbox ID from wsb start output — monitoring by process names only."
+        Write-Verbose "wsb start output: $($startOutput -join '; ')"
     }
-    Write-Host '.' -NoNewline -ForegroundColor Cyan
-    $dotCount++
-    if ($dotCount % 12 -eq 0) {
-        $remaining = [math]::Round(($deadline - (Get-Date)).TotalMinutes, 1)
-        Write-Host " ($remaining min remaining)" -NoNewline -ForegroundColor Gray
+
+    Write-Host "  Waiting for results" -NoNewline -ForegroundColor Cyan
+    while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 5
+
+        # If we have a sandbox ID, confirm it is still listed as running
+        if ($sandboxId) {
+            $listNow = & $wsbCliPath list 2>&1
+            if ($listNow -notmatch [regex]::Escape($sandboxId)) {
+                $exitedEarly = $true
+                break
+            }
+        } else {
+            # Fallback: check by process names
+            $sbProcs = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
+            # (no early-abort on this path — unreliable without an ID)
+            $sbProcs | Out-Null  # suppress unused-variable warning
+        }
+
+        Write-Host '.' -NoNewline -ForegroundColor Cyan
+        $dotCount++
+        if ($dotCount % 12 -eq 0) {
+            $remaining = [math]::Round(($deadline - (Get-Date)).TotalMinutes, 1)
+            Write-Host " ($remaining min remaining)" -NoNewline -ForegroundColor Gray
+        }
     }
+    Write-Host ""
+
+    # Stop the sandbox by ID (idempotent — safe even if already shut down)
+    if ($sandboxId) {
+        & $wsbCliPath stop --id $sandboxId 2>&1 | Out-Null
+    }
+    # Also kill remaining processes for good measure
+    Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
+
+} else {
+    # ── Legacy WindowsSandbox.exe path ───────────────────────────────────────────
+    # Wait up to 30 s for any lingering sandbox from a previous test to fully exit
+    # before attempting to launch a new one (only one instance is allowed).
+    $preWaitEnd    = (Get-Date).AddSeconds(30)
+    $preWaitLogged = $false
+    while ((Get-Date) -lt $preWaitEnd) {
+        $stale = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
+        if (-not $stale) { break }
+        if (-not $preWaitLogged) {
+            Write-Info "Waiting for previous sandbox to finish shutting down..."
+            $preWaitLogged = $true
+        }
+        Start-Sleep -Seconds 3
+    }
+
+    Start-Process -FilePath $wsbLaunchPath -ArgumentList $wsbPath
+
+    # Poll purely on the results file + timeout.
+    # The legacy launcher exits immediately and WindowsSandboxClient can take time
+    # to appear; reliable process-death detection is not possible here, so we simply
+    # wait for the results file or the deadline.
+    Write-Host "  Waiting for results" -NoNewline -ForegroundColor Cyan
+    while (-not (Test-Path $resultsFile) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Seconds 5
+        Write-Host '.' -NoNewline -ForegroundColor Cyan
+        $dotCount++
+        if ($dotCount % 12 -eq 0) {
+            $remaining = [math]::Round(($deadline - (Get-Date)).TotalMinutes, 1)
+            Write-Host " ($remaining min remaining)" -NoNewline -ForegroundColor Gray
+        }
+    }
+    Write-Host ""
+
+    # Force-close any remaining sandbox processes so the next test can start cleanly
+    Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue |
+        Stop-Process -Force -ErrorAction SilentlyContinue
 }
-Write-Host ""
 
-# Force-close any remaining sandbox processes so the next test can start cleanly
-Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue |
-    Stop-Process -Force -ErrorAction SilentlyContinue
+if (-not (Test-Path $resultsFile)) { $timedOut = $true }
 
-if ($sandboxAborted) {
+if ($exitedEarly) {
     Write-Host "`n══════════════════════════════════════" -ForegroundColor White
     Write-Host "  SANDBOX CLOSED UNEXPECTEDLY" -ForegroundColor Red
     Write-Host "══════════════════════════════════════`n" -ForegroundColor White
     Write-Host "  The sandbox exited before the test completed." -ForegroundColor Yellow
     Write-Host "  Check the log for the last known state:`n" -ForegroundColor Yellow
-} elseif (-not (Test-Path $resultsFile)) {
+} elseif ($timedOut) {
     Write-Host "`n══════════════════════════════════════" -ForegroundColor White
     Write-Host "  TIMED OUT after $TimeoutMinutes minutes" -ForegroundColor Red
     Write-Host "══════════════════════════════════════`n" -ForegroundColor White
@@ -871,8 +954,7 @@ if ($sandboxAborted) {
     Write-Host "  Check the log for the last known state:`n" -ForegroundColor Yellow
 }
 
-if ($sandboxAborted -or -not (Test-Path $resultsFile)) {
-    $sandboxLog = Join-Path $WorkspacePath 'sandbox.log'
+if ($exitedEarly -or $timedOut) {
     if (Test-Path $sandboxLog) {
         Write-Info "Sandbox log: $sandboxLog"
         Write-Host ""

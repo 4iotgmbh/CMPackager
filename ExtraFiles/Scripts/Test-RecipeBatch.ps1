@@ -161,12 +161,22 @@ foreach ($recipeFile in $recipeFiles) {
     }
     if (-not $KeepInstallers) { $testArgs['CleanupInstaller'] = $true }
 
-    # Wait for any lingering sandbox processes from a previous test to exit
+    # Wait for any lingering sandbox from the previous test to fully exit before
+    # launching the next one (only one instance of Windows Sandbox is allowed).
+    # On Windows 11 24H2+ wsb.exe is used for a precise check; on older systems
+    # we fall back to process names.
+    $wsbCliPath     = "$env:SystemRoot\System32\wsb.exe"
+    $useWsbCliLocal = Test-Path $wsbCliPath
     $sbWaitDeadline = (Get-Date).AddMinutes(3)
     $sbWaitLogged   = $false
     while ((Get-Date) -lt $sbWaitDeadline) {
-        $sbProcs = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
-        if (-not $sbProcs) { break }
+        $sandboxRunning = if ($useWsbCliLocal) {
+            $listOut = & $wsbCliPath list 2>&1
+            [bool]($listOut | Select-String -Pattern '[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}')
+        } else {
+            [bool](Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue)
+        }
+        if (-not $sandboxRunning) { break }
         if (-not $sbWaitLogged) {
             Write-Host '  Waiting for previous sandbox to shut down...' -ForegroundColor DarkYellow
             $sbWaitLogged = $true
