@@ -90,27 +90,35 @@ param (
 
 Set-StrictMode -Version 1
 $ErrorActionPreference = 'Stop'
+$script:testStartTime  = Get-Date
 
 #region ── Helpers ──────────────────────────────────────────────────────────────
 
+function Get-ElapsedPrefix {
+    $elapsed = (Get-Date) - $script:testStartTime
+    $m = [int]$elapsed.TotalMinutes
+    $s = $elapsed.Seconds
+    return '[{0}:{1:d2}]' -f $m, $s
+}
+
 function Write-Step {
     param([string]$Message)
-    Write-Host "  $Message" -ForegroundColor Cyan
+    Write-Host "  $(Get-ElapsedPrefix) $Message" -ForegroundColor Cyan
 }
 
 function Write-Pass {
     param([string]$Message)
-    Write-Host "  [PASS] $Message" -ForegroundColor Green
+    Write-Host "  $(Get-ElapsedPrefix) [PASS] $Message" -ForegroundColor Green
 }
 
 function Write-Fail {
     param([string]$Message)
-    Write-Host "  [FAIL] $Message" -ForegroundColor Red
+    Write-Host "  $(Get-ElapsedPrefix) [FAIL] $Message" -ForegroundColor Red
 }
 
 function Write-Info {
     param([string]$Message)
-    Write-Host "  [INFO] $Message" -ForegroundColor Gray
+    Write-Host "  $(Get-ElapsedPrefix) [INFO] $Message" -ForegroundColor Gray
 }
 
 # Map SCCM hive names to PowerShell PSDrive paths
@@ -1117,9 +1125,11 @@ if ($useWsbCli) {
     if ($staleIds) { Start-Sleep -Seconds 3 }
 
     # Launch and capture the sandbox ID.
-    # wsb start -c takes the WSB XML content as an inline string, not a file path.
+    # wsb start --config takes the WSB XML content as an inline string, not a file path.
+    # Collapse to a single line — some builds of wsb.exe reject multi-line arguments.
     # wsb start outputs:  "Windows Sandbox environment started successfully:\nId: <guid>"
-    $startOutput = & $wsbCliPath start --config $wsbContent 2>&1
+    $wsbContentOneLine = $wsbContent -replace '\r?\n\s*', ''
+    $startOutput = & $wsbCliPath start --config $wsbContentOneLine 2>&1
     $sandboxId   = ($startOutput | Where-Object { $_ -match '^Id:\s' }) -replace '^Id:\s*'
 
     if ($sandboxId) {
@@ -1137,7 +1147,7 @@ if ($useWsbCli) {
     $sandboxReady  = $false
     while (-not $sandboxReady -and (Get-Date) -lt $readyDeadline) {
         Start-Sleep -Seconds 5
-        $null = & $wsbCliPath exec --id $sandboxId -c 'cmd /c exit 0' -r System 2>&1
+        $null = & $wsbCliPath exec --id $sandboxId --command 'cmd /c exit 0' --run-as System 2>&1
         if ($LASTEXITCODE -eq 0) { $sandboxReady = $true }
         else { Write-Host '.' -NoNewline -ForegroundColor Cyan }
     }
@@ -1154,7 +1164,7 @@ if ($useWsbCli) {
     # ── Step 1: Install ──────────────────────────────────────────────────────────
     Write-Step "Step 1: Install"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 1: Install ---" | Add-Content $sandboxLog
-    $null = & $wsbCliPath exec --id $sandboxId -c 'C:\TestFiles\install.cmd' -r System 2>&1
+    $null = & $wsbCliPath exec --id $sandboxId --command 'C:\TestFiles\install.cmd' --run-as System 2>&1
     $installExitCode = $LASTEXITCODE
     $installSuccess  = $installExitCode -in @(0, 3010, 1641)
     Write-Info "Install exit code: $installExitCode ($(if ($installSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
@@ -1164,14 +1174,14 @@ if ($useWsbCli) {
         Write-Step "Waiting for MSI installer event (1033)..."
         $msiWaitMins = [math]::Max(5, $TimeoutMinutes - 10)
         $msiWaitCmd  = "powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\WaitMsiEvent.ps1 -ProductName '$($appName -replace "'", "''")' -EventIds 1033 -TimeoutMinutes $msiWaitMins"
-        $null = & $wsbCliPath exec --id $sandboxId -c $msiWaitCmd -r System 2>&1
+        $null = & $wsbCliPath exec --id $sandboxId --command $msiWaitCmd --run-as System 2>&1
     }
 
     # ── Step 2: Detect after install ─────────────────────────────────────────────
     Write-Step "Step 2: Detection after install"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 2: Detection after install ---" | Add-Content $sandboxLog
     $detectInstallCmd = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile C:\TestFiles\detect_after_install.json'
-    $null = & $wsbCliPath exec --id $sandboxId -c $detectInstallCmd -r System 2>&1
+    $null = & $wsbCliPath exec --id $sandboxId --command $detectInstallCmd --run-as System 2>&1
 
     $detAfterInstall = [ordered]@{ Detected = ($LASTEXITCODE -eq 0); ClauseResults = @() }
     $detAfterInstallJson = Join-Path $WorkspacePath 'detect_after_install.json'
@@ -1189,7 +1199,7 @@ if ($useWsbCli) {
     } else {
         Write-Step "Step 3: Uninstall"
         "$((Get-Date -Format 'HH:mm:ss')) --- Step 3: Uninstall ---" | Add-Content $sandboxLog
-        $null = & $wsbCliPath exec --id $sandboxId -c 'C:\TestFiles\uninstall.cmd' -r System 2>&1
+        $null = & $wsbCliPath exec --id $sandboxId --command 'C:\TestFiles\uninstall.cmd' --run-as System 2>&1
         $uninstallExitCode = $LASTEXITCODE
         $uninstallSuccess  = $uninstallExitCode -in @(0, 3010, 1641)
         Write-Info "Uninstall exit code: $uninstallExitCode ($(if ($uninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
@@ -1197,7 +1207,7 @@ if ($useWsbCli) {
         if ($installType -eq 'MSI') {
             Write-Step "Waiting for MSI installer event (1034)..."
             $msiWaitCmd2 = "powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\WaitMsiEvent.ps1 -ProductName '$($appName -replace "'", "''")' -EventIds 1034 -TimeoutMinutes $msiWaitMins"
-            $null = & $wsbCliPath exec --id $sandboxId -c $msiWaitCmd2 -r System 2>&1
+            $null = & $wsbCliPath exec --id $sandboxId --command $msiWaitCmd2 --run-as System 2>&1
         }
     }
 
@@ -1205,7 +1215,7 @@ if ($useWsbCli) {
     Write-Step "Step 4: Detection after uninstall"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 4: Detection after uninstall ---" | Add-Content $sandboxLog
     $detectUninstallCmd = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile C:\TestFiles\detect_after_uninstall.json'
-    $null = & $wsbCliPath exec --id $sandboxId -c $detectUninstallCmd -r System 2>&1
+    $null = & $wsbCliPath exec --id $sandboxId --command $detectUninstallCmd --run-as System 2>&1
 
     $detAfterUninstall = [ordered]@{ Detected = ($LASTEXITCODE -eq 0); ClauseResults = @() }
     $detAfterUninstallJson = Join-Path $WorkspacePath 'detect_after_uninstall.json'
