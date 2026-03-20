@@ -654,6 +654,7 @@ exit /b %EXIT%
     # .wsb config — mapped folder only, no LogonCommand (orchestrated via wsb exec)
     $wsbContent = @"
 <Configuration>
+  <MemoryInMB>8192</MemoryInMB>
   <MappedFolders>
     <MappedFolder>
       <HostFolder>$WorkspacePath</HostFolder>
@@ -1071,6 +1072,7 @@ powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "C:\TestFiles\RunTe
 
     $wsbContent = @"
 <Configuration>
+  <MemoryInMB>8192</MemoryInMB>
   <MappedFolders>
     <MappedFolder>
       <HostFolder>$WorkspacePath</HostFolder>
