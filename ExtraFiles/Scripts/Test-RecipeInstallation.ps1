@@ -1117,9 +1117,9 @@ if ($useWsbCli) {
     if ($staleIds) { Start-Sleep -Seconds 3 }
 
     # Launch and capture the sandbox ID.
-    # wsb start takes the .wsb config file as a positional argument (not --config).
+    # wsb start -c takes the WSB XML content as an inline string, not a file path.
     # wsb start outputs:  "Windows Sandbox environment started successfully:\nId: <guid>"
-    $startOutput = & $wsbCliPath start $wsbPath 2>&1
+    $startOutput = & $wsbCliPath start --config $wsbContent 2>&1
     $sandboxId   = ($startOutput | Where-Object { $_ -match '^Id:\s' }) -replace '^Id:\s*'
 
     if ($sandboxId) {
