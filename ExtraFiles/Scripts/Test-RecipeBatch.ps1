@@ -190,6 +190,7 @@ foreach ($recipeFile in $recipeFiles) {
         & $testScript @testArgs
     } catch {
         $extraNotes = "Unhandled exception: $_"
+        Write-Host "  [ERROR] Test script threw an exception: $_" -ForegroundColor Red
     }
 
     $durationMin = [math]::Round(((Get-Date) - $testStart).TotalMinutes, 1)
