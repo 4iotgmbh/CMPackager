@@ -592,7 +592,6 @@ if ($result.Detected) { exit 0 } else { exit 1 }
     if ($installType -eq 'MSI') {
         @'
 param(
-    [string]$ProductName,
     [int[]]$EventIds,
     [int]$TimeoutMinutes = 15
 )
@@ -603,11 +602,11 @@ function Write-Log {
     $ts = Get-Date -Format 'HH:mm:ss'
     "$ts $Message" | Tee-Object -FilePath $LogPath -Append | Write-Host
 }
-Write-Log "Waiting for MsiInstaller event (IDs: $($EventIds -join ',')) for '$ProductName'..."
+Write-Log "Waiting for MsiInstaller event (IDs: $($EventIds -join ','))..."
 $deadline = (Get-Date).AddMinutes($TimeoutMinutes)
 while ((Get-Date) -lt $deadline) {
     $events = Get-EventLog -LogName Application -Source MsiInstaller -Newest 20 -ErrorAction SilentlyContinue |
-        Where-Object { $_.EventID -in $EventIds -and $_.Message -like "*$ProductName*" }
+        Where-Object { $_.EventID -in $EventIds }
     if ($events) {
         Write-Log "  MsiInstaller event found (ID $($events[0].EventID)) -- installer transaction complete."
         exit 0
@@ -737,16 +736,15 @@ function Invoke-RecipeCommand {
 # EventID 1033 = install completed, 1034 = uninstall completed
 function Wait-MsiInstallerEvent {
     param(
-        [string]`$ProductName,
         [datetime]`$After,
         [int[]]`$EventIds,
         [int]`$TimeoutMinutes = 20
     )
-    Write-Log "Waiting for MsiInstaller event (IDs: `$(`$EventIds -join ',')) for product '`$ProductName'..."
+    Write-Log "Waiting for MsiInstaller event (IDs: `$(`$EventIds -join ','))..."
     `$deadline = (Get-Date).AddMinutes(`$TimeoutMinutes)
     while ((Get-Date) -lt `$deadline) {
         `$events = Get-EventLog -LogName Application -Source MsiInstaller -Newest 20 -ErrorAction SilentlyContinue |
-            Where-Object { `$_.TimeGenerated -gt `$After -and `$_.EventID -in `$EventIds -and `$_.Message -like "*`$ProductName*" }
+            Where-Object { `$_.TimeGenerated -gt `$After -and `$_.EventID -in `$EventIds }
         if (`$events) {
             Write-Log "  MsiInstaller event found (ID `$(`$events[0].EventID)) -- installer transaction complete."
             return
@@ -982,7 +980,7 @@ try {
 # MSI only: wait for Windows Installer to commit the transaction before detecting
 if (`$InstallationType -eq 'MSI') {
     if (`$null -eq `$installStart) { `$installStart = (Get-Date).AddMinutes(-1) }
-    Wait-MsiInstallerEvent -ProductName `$AppName -After `$installStart -EventIds @(1033)
+    Wait-MsiInstallerEvent -After `$installStart -EventIds @(1033)
 }
 Start-Sleep -Seconds 3
 
@@ -1012,7 +1010,7 @@ if ([string]::IsNullOrWhiteSpace(`$UninstallCmd)) {
     # MSI only: wait for Windows Installer to commit the transaction before detecting
     if (`$InstallationType -eq 'MSI') {
         if (`$null -eq `$uninstallStart) { `$uninstallStart = (Get-Date).AddMinutes(-1) }
-        Wait-MsiInstallerEvent -ProductName `$AppName -After `$uninstallStart -EventIds @(1034)
+        Wait-MsiInstallerEvent -After `$uninstallStart -EventIds @(1034)
     }
     Start-Sleep -Seconds 3
 }
@@ -1175,7 +1173,7 @@ if ($useWsbCli) {
     if ($installType -eq 'MSI') {
         Write-Step "Waiting for MSI installer event (1033)..."
         $msiWaitMins = [math]::Max(5, $TimeoutMinutes - 10)
-        $msiWaitCmd  = "powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\WaitMsiEvent.ps1 -ProductName '$($appName -replace "'", "''")' -EventIds 1033 -TimeoutMinutes $msiWaitMins"
+        $msiWaitCmd  = "powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\WaitMsiEvent.ps1 -EventIds 1033 -TimeoutMinutes $msiWaitMins"
         $null = & $wsbCliPath exec --id $sandboxId --command $msiWaitCmd --run-as System 2>&1
     }
 
@@ -1208,7 +1206,7 @@ if ($useWsbCli) {
 
         if ($installType -eq 'MSI') {
             Write-Step "Waiting for MSI installer event (1034)..."
-            $msiWaitCmd2 = "powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\WaitMsiEvent.ps1 -ProductName '$($appName -replace "'", "''")' -EventIds 1034 -TimeoutMinutes $msiWaitMins"
+            $msiWaitCmd2 = "powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\WaitMsiEvent.ps1 -EventIds 1034 -TimeoutMinutes $msiWaitMins"
             $null = & $wsbCliPath exec --id $sandboxId --command $msiWaitCmd2 --run-as System 2>&1
         }
     }
