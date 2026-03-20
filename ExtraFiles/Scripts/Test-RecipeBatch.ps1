@@ -165,8 +165,9 @@ foreach ($recipeFile in $recipeFiles) {
     # launching the next one (only one instance of Windows Sandbox is allowed).
     # On Windows 11 24H2+ wsb.exe is used for a precise check; on older systems
     # we fall back to process names.
-    $wsbCliPath     = "$env:SystemRoot\System32\wsb.exe"
-    $useWsbCliLocal = Test-Path $wsbCliPath
+    $wsbCliCmd      = Get-Command 'wsb.exe' -ErrorAction SilentlyContinue
+    $wsbCliPath     = if ($wsbCliCmd) { $wsbCliCmd.Source } else { $null }
+    $useWsbCliLocal = [bool]$wsbCliCmd
     $sbWaitDeadline = (Get-Date).AddMinutes(3)
     $sbWaitLogged   = $false
     while ((Get-Date) -lt $sbWaitDeadline) {

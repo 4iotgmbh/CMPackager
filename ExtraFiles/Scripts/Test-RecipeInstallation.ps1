@@ -136,9 +136,11 @@ Write-Host "======================================`n" -ForegroundColor White
 # Detect wsb.exe (Windows 11 24H2+ CLI) vs WindowsSandbox.exe (legacy launcher).
 # wsb.exe lets us launch with a stable sandbox ID and stop it by ID — avoiding the
 # "only one instance" problem that plagues the legacy launcher path.
-$wsbCliPath    = "$env:SystemRoot\System32\wsb.exe"
+# Use Get-Command so PATH is searched; wsb.exe may not always be in System32 directly.
+$wsbCliCmd     = Get-Command 'wsb.exe' -ErrorAction SilentlyContinue
+$wsbCliPath    = if ($wsbCliCmd) { $wsbCliCmd.Source } else { "$env:SystemRoot\System32\wsb.exe" }
 $wsbLaunchPath = "$env:SystemRoot\System32\WindowsSandbox.exe"
-$useWsbCli     = Test-Path $wsbCliPath
+$useWsbCli     = [bool]$wsbCliCmd
 
 if (-not $useWsbCli -and -not (Test-Path $wsbLaunchPath)) {
     Write-Error @"
