@@ -121,6 +121,26 @@ function Write-Info {
     Write-Host "  $(Get-ElapsedPrefix) [INFO] $Message" -ForegroundColor Gray
 }
 
+# Extract ProductCode from an MSI file using the Windows Installer COM object (host-side).
+# Called before sandbox launch so Detect.ps1 only needs a registry lookup (no COM in sandbox).
+function Get-MsiProductCodeFromFile {
+    param([string]$MsiPath)
+    if (-not (Test-Path $MsiPath)) { return $null }
+    try {
+        $installer = New-Object -ComObject WindowsInstaller.Installer
+        $db = $installer.GetType().InvokeMember('OpenDatabase', 'InvokeMethod', $null, $installer, @($MsiPath, 0))
+        $view = $db.GetType().InvokeMember('OpenView', 'InvokeMethod', $null, $db,
+            @("SELECT Value FROM Property WHERE Property='ProductCode'"))
+        $view.GetType().InvokeMember('Execute', 'InvokeMethod', $null, $view, $null) | Out-Null
+        $record = $view.GetType().InvokeMember('Fetch', 'InvokeMethod', $null, $view, $null)
+        if ($null -eq $record) { return $null }
+        return $record.GetType().InvokeMember('StringData', 'GetProperty', $null, $record, @(1))
+    } catch {
+        Write-Warning "Could not extract ProductCode from MSI on host: $_"
+        return $null
+    }
+}
+
 # Map SCCM hive names to PowerShell PSDrive paths
 function Convert-HiveName {
     param([string]$Hive)
@@ -335,8 +355,17 @@ $detectionClauseLiterals = @()
 
 switch ($detMethodType) {
     'MSI' {
-        # Product code is read from the MSI file at test time inside the sandbox
-        $detectionClauseLiterals += "@{ Type='MSI'; InstallerFile='$installerFileName' }"
+        # Extract ProductCode on the host so Detect.ps1 only needs a registry lookup.
+        # Using the Windows Installer COM object inside the sandbox (SYSTEM context via wsb exec)
+        # hangs for ~60 s — the COM server is unavailable to SYSTEM in the sandbox session.
+        $hostPc = Get-MsiProductCodeFromFile $resolvedInstallerPath
+        if ($hostPc) {
+            Write-Info "MSI ProductCode (from host): $($hostPc.Trim())"
+            $detectionClauseLiterals += "@{ Type='MSI'; ProductCode='$($hostPc.Trim() -replace "'", "''")' }"
+        } else {
+            Write-Warning "Could not extract ProductCode from MSI on host — falling back to in-sandbox extraction (may be slow)"
+            $detectionClauseLiterals += "@{ Type='MSI'; InstallerFile='$installerFileName' }"
+        }
     }
     { $_ -in 'Custom', 'CustomScript' } {
         $clauses = $depType.CustomDetectionMethods.DetectionClause
@@ -676,11 +705,22 @@ exit /b %EXIT%
     foreach ($detectStep in @('install', 'uninstall')) {
         @"
 @echo off
+echo [%TIME%] detect_after_$detectStep.cmd starting >>C:\TestFiles\sandbox.log
 mkdir C:\Temp\CMPackagerTest 2>nul
+if not exist "C:\Temp\CMPackagerTest\Detect.ps1" (
+  echo [%TIME%] ERROR: Detect.ps1 not found at C:\Temp\CMPackagerTest\ >>C:\TestFiles\sandbox.log
+  exit /b 2
+)
 powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\Temp\CMPackagerTest\Detect.ps1 -OutputFile "C:\Temp\CMPackagerTest\detect_after_$detectStep.json"
 set EXIT=%ERRORLEVEL%
-if exist "C:\Temp\CMPackagerTest\detect_after_$detectStep.json" copy /Y "C:\Temp\CMPackagerTest\detect_after_$detectStep.json" "C:\TestFiles\detect_after_$detectStep.json" >nul 2>&1
-if exist "C:\Temp\CMPackagerTest\detect_after_$detectStep.log"  copy /Y "C:\Temp\CMPackagerTest\detect_after_$detectStep.log"  "C:\TestFiles\detect_after_$detectStep.log"  >nul 2>&1
+echo [%TIME%] Detect.ps1 exit code: %EXIT% >>C:\TestFiles\sandbox.log
+if exist "C:\Temp\CMPackagerTest\detect_after_$detectStep.json" (
+  copy /Y "C:\Temp\CMPackagerTest\detect_after_$detectStep.json" "C:\TestFiles\detect_after_$detectStep.json" >nul 2>&1
+  echo [%TIME%] detect_after_$detectStep.json copied >>C:\TestFiles\sandbox.log
+) else (
+  echo [%TIME%] WARNING: detect_after_$detectStep.json not produced >>C:\TestFiles\sandbox.log
+)
+if exist "C:\Temp\CMPackagerTest\detect_after_$detectStep.log" copy /Y "C:\Temp\CMPackagerTest\detect_after_$detectStep.log" "C:\TestFiles\detect_after_$detectStep.log" >nul 2>&1
 exit /b %EXIT%
 "@ | Set-Content (Join-Path $WorkspacePath "detect_after_$detectStep.cmd") -Encoding ASCII
     }
@@ -1283,10 +1323,14 @@ if ($useWsbCli) {
     $detectInstallRc  = Invoke-SandboxExec 'Step 2: Detect after install' 'C:\TestFiles\detect_after_install.cmd'
     if ($detectInstallRc -eq -999) { Write-TimeoutResult 'Timed out during Step 2: Detection after install' }
 
-    $detAfterInstall = [ordered]@{ Detected = ($detectInstallRc -eq 0); ClauseResults = @() }
+    # wsb exec returns 0 regardless of the command's exit code — use the JSON file as
+    # the source of truth.  A missing file means Detect.ps1 did not produce output.
+    $detAfterInstall = [ordered]@{ Detected = $null; ClauseResults = @() }
     $detAfterInstallJson = Join-Path $WorkspacePath 'detect_after_install.json'
     if (Test-Path $detAfterInstallJson) {
         try { $detAfterInstall = Get-Content $detAfterInstallJson -Raw | ConvertFrom-Json } catch {}
+    } else {
+        Write-Info "detect_after_install.json not produced (wsb exec rc: $detectInstallRc) — check sandbox.log"
     }
     Write-Info "Detected after install: $($detAfterInstall.Detected)"
 
@@ -1315,10 +1359,12 @@ if ($useWsbCli) {
     $detectUninstallRc  = Invoke-SandboxExec 'Step 4: Detect after uninstall' 'C:\TestFiles\detect_after_uninstall.cmd'
     if ($detectUninstallRc -eq -999) { Write-TimeoutResult 'Timed out during Step 4: Detection after uninstall' }
 
-    $detAfterUninstall = [ordered]@{ Detected = ($detectUninstallRc -eq 0); ClauseResults = @() }
+    $detAfterUninstall = [ordered]@{ Detected = $null; ClauseResults = @() }
     $detAfterUninstallJson = Join-Path $WorkspacePath 'detect_after_uninstall.json'
     if (Test-Path $detAfterUninstallJson) {
         try { $detAfterUninstall = Get-Content $detAfterUninstallJson -Raw | ConvertFrom-Json } catch {}
+    } else {
+        Write-Info "detect_after_uninstall.json not produced (wsb exec rc: $detectUninstallRc) — check sandbox.log"
     }
     Write-Info "Detected after uninstall: $($detAfterUninstall.Detected)"
 
