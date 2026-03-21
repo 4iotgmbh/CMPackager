@@ -433,7 +433,7 @@ if ($useWsbCli) {
 # Exits: 0 = application detected, 1 = not detected
 param([string]$OutputFile = 'C:\TestFiles\detect_result.json')
 $ErrorActionPreference = 'Continue'
-$LogPath = 'C:\TestFiles\detect.log'
+$LogPath = [System.IO.Path]::ChangeExtension($OutputFile, '.log')
 
 function Write-Log {
     param([string]$Message)
@@ -630,6 +630,7 @@ cd /d C:\Temp\CMPackagerTest
 echo [%TIME%] Running install: $installCmdBatch >>C:\TestFiles\sandbox.log
 $installCmdBatch
 set EXIT=%ERRORLEVEL%
+if exist install.log copy /Y install.log "C:\TestFiles\install.log" >nul 2>&1
 echo [%TIME%] Install exit code: %EXIT% >>C:\TestFiles\sandbox.log
 exit /b %EXIT%
 "@ | Set-Content (Join-Path $WorkspacePath 'install.cmd') -Encoding ASCII
@@ -644,6 +645,7 @@ cd /d C:\Temp\CMPackagerTest
 echo [%TIME%] Running uninstall: $uninstallCmdBatch >>C:\TestFiles\sandbox.log
 $uninstallCmdBatch
 set EXIT=%ERRORLEVEL%
+if exist uninstall.log copy /Y uninstall.log "C:\TestFiles\uninstall.log" >nul 2>&1
 echo [%TIME%] Uninstall exit code: %EXIT% >>C:\TestFiles\sandbox.log
 exit /b %EXIT%
 "@ | Set-Content (Join-Path $WorkspacePath 'uninstall.cmd') -Encoding ASCII
