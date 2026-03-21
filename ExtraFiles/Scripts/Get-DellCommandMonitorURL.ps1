@@ -1,19 +1,19 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Returns the direct dl.dell.com CDN URL for Dell Command Monitor (Classic/Win32).
+    Returns the direct dl.dell.com CDN URL for Dell Command Update (Classic/Win32).
 
 .DESCRIPTION
     Two-hop approach:
       1. Fetch KB article 000177325, extract every
          /support/home/en-us/drivers/driversdetails?driverid=XXXX link.
       2. For each driver-details link (Classic only, UWP excluded), fetch that
-         page and extract the dl.dell.com/FOLDER.../filename.EXE CDN URL.
+         page and extract the dl.dell.com/FOLDER…/filename.EXE CDN URL.
          Then follow any remaining HTTP redirects to confirm the terminal blob URL.
-    Outputs ONLY the resolved CDN URL to stdout -- no other text.
+    Outputs ONLY the resolved CDN URL — no other text.
 
 .NOTES
-    PowerShell 5.1 on Windows -- no extra modules required.
+    PowerShell 5.1 on Windows — no extra modules required.
     Called from DellCommandMonitor.xml PrefetchScript via powershell.exe -File.
 #>
 
@@ -24,7 +24,7 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 Add-Type -AssemblyName System.Web
 
-# -- Configuration --------------------------------------------------------------
+# ── Configuration ──────────────────────────────────────────────────────────────
 $KbUrl      = 'https://www.dell.com/support/kbdoc/en-us/000177325/dell-command-update'
 $UA         = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 $TimeoutSec = 30
@@ -53,7 +53,7 @@ $DetailRx = [regex]'(?i)https?://www\.dell\.com/support/home/[^"''<>\s\\]+/drive
 # UWP / Store / non-Win32 exclusion
 $SkipRx   = [regex]'(?i)uwp|windowsapp|msix|appxbundle|appinstaller|xbox'
 
-# -- Helper: follow HTTP redirects, return terminal URL -------------------------
+# ── Helper: follow HTTP redirects, return terminal URL ─────────────────────────
 function Resolve-Redirects ([string]$Uri) {
     $req = [System.Net.HttpWebRequest]::Create($Uri)
     $req.Method                       = 'HEAD'
@@ -78,11 +78,11 @@ function Resolve-Redirects ([string]$Uri) {
     catch { return $Uri }
 }
 
-# -- Helper: fetch a page, return raw HTML (null on failure) -------------------
+# ── Helper: fetch a page, return raw HTML (null on failure) ───────────────────
 function Invoke-Page ([string]$Uri, [string]$Referer = '') {
     $h = $BrowserHeaders.Clone()
     if ($Referer) {
-        $h['Referer']        = $Referer
+        $h['Referer']       = $Referer
         $h['Sec-Fetch-Site'] = 'same-origin'
     }
     try {
@@ -92,7 +92,7 @@ function Invoke-Page ([string]$Uri, [string]$Referer = '') {
     catch { $null }
 }
 
-# -- Helper: extract first CDN URL from text, skipping UWP artefacts ----------
+# ── Helper: extract first CDN URL from text, skipping UWP artefacts ──────────
 function Find-CdnUrl ([string]$Text) {
     foreach ($m in $CdnRx.Matches($Text)) {
         $url = [System.Web.HttpUtility]::HtmlDecode(($m.Value -replace '\\/', '/'))
@@ -101,11 +101,11 @@ function Find-CdnUrl ([string]$Text) {
     return $null
 }
 
-# -- Step 1: fetch KB article --------------------------------------------------
+# ── Step 1: fetch KB article ──────────────────────────────────────────────────
 $kbHtml = Invoke-Page -Uri $KbUrl
-if (-not $kbHtml) { Write-Error "Failed to fetch KB article: $KbUrl"; exit 1 }
+if (-not $kbHtml) { Write-Error "Failed to fetch KB article: $KbUrl"; return }
 
-# -- Step 2: collect driver-details links --------------------------------------
+# ── Step 2: collect driver-details links ─────────────────────────────────────
 # Search both the raw HTML and any embedded __NEXT_DATA__ JSON blob so that
 # links nested inside Next.js server props are also found.
 $searchText = $kbHtml
@@ -122,7 +122,7 @@ foreach ($m in $DetailRx.Matches($searchText)) {
     }
 }
 
-# Also scan parsed <a> tags (UseBasicParsing builds these via regex in PS 5.1)
+# Also scan parsed <a> tags (PS 5.1 UseBasicParsing builds these via regex)
 $tmpPage = Invoke-WebRequest -Uri $KbUrl -Headers $BrowserHeaders -UseBasicParsing -MaximumRedirection 10
 foreach ($link in $tmpPage.Links) {
     $hp = $link.PSObject.Properties['href']
@@ -136,15 +136,15 @@ foreach ($link in $tmpPage.Links) {
 
 if ($detailLinks.Count -eq 0) {
     Write-Error 'No driversdetails links found on the KB page.'
-    exit 1
+    return
 }
 
-# -- Step 3: for each driver-details page, find the CDN URL -------------------
+# ── Step 3: for each driver-details page, find the CDN URL ───────────────────
 $result = $null
 
 foreach ($detailUrl in $detailLinks) {
 
-    # 3a. HTTP-redirect shortcut -- some detail links redirect straight to CDN
+    # 3a. HTTP-redirect shortcut — some detail links redirect straight to CDN
     $resolved = Resolve-Redirects -Uri $detailUrl
     if ($CdnRx.IsMatch($resolved) -and -not $SkipRx.IsMatch($resolved)) {
         $result = $CdnRx.Match($resolved).Value
@@ -174,12 +174,11 @@ foreach ($detailUrl in $detailLinks) {
     if ($result) { break }
 }
 
-# -- Step 4: final redirect-chase and output -----------------------------------
+# ── Step 4: final redirect-chase and output ───────────────────────────────────
 if ($result) {
     $terminal = Resolve-Redirects -Uri $result
     if ($CdnRx.IsMatch($terminal)) { $result = $CdnRx.Match($terminal).Value }
     Write-Output $result
 } else {
     Write-Error 'Could not locate the CDN download URL on any driversdetails page.'
-    exit 1
 }
