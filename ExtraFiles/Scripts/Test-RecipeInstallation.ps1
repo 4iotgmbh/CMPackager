@@ -344,7 +344,7 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
     Write-Info "Downloading to: $resolvedInstallerPath"
     try {
         $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -Uri $resolvedUrl -OutFile $resolvedInstallerPath -UseBasicParsing -ErrorAction Stop
+        Invoke-WebRequest -Uri $resolvedUrl -OutFile $resolvedInstallerPath -UseBasicParsing -AllowInsecureRedirect -ErrorAction Stop
         $ProgressPreference = 'Continue'
         Write-Info "Download complete: $([math]::Round((Get-Item $resolvedInstallerPath).Length / 1MB, 1)) MB"
     } catch {
