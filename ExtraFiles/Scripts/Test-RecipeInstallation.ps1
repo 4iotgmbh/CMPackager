@@ -281,8 +281,16 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
     $resolvedInstallerPath = $InstallerPath
     Write-Step "Using provided installer: $resolvedInstallerPath"
 } else {
-    $directUrl     = if ($linkedDownload) { $linkedDownload.URL }           else { $null }
-    $prefetchScript = if ($linkedDownload) { $linkedDownload.PrefetchScript } else { $null }
+    # When a node contains a CDATA section, PowerShell's XML adapter returns an XmlElement
+    # rather than a plain string.  Extract .InnerText in that case to get the raw content.
+    $directUrl = if ($linkedDownload) {
+        $n = $linkedDownload.URL
+        if ($n -is [System.Xml.XmlElement]) { $n.InnerText } else { [string]$n }
+    } else { $null }
+    $prefetchScript = if ($linkedDownload) {
+        $n = $linkedDownload.PrefetchScript
+        if ($n -is [System.Xml.XmlElement]) { $n.InnerText } else { [string]$n }
+    } else { $null }
 
     # Resolve a download URL — either directly from <URL> or by running <PrefetchScript>
     $resolvedUrl = $null
