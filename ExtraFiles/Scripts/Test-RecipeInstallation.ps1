@@ -654,6 +654,23 @@ exit /b %EXIT%
         Write-Info "Generated: uninstall.cmd"
     }
 
+    # Detect wrapper cmds — PowerShell Set-Content/Add-Content cannot write to the WSB
+    # mapped folder from SYSTEM context via wsb exec (only cmd.exe native I/O works).
+    # Each wrapper runs Detect.ps1 with a LOCAL output path, then copies both the JSON
+    # result and the log to C:\TestFiles\ using cmd.exe copy, which does work.
+    foreach ($detectStep in @('install', 'uninstall')) {
+        @"
+@echo off
+mkdir C:\Temp\CMPackagerTest 2>nul
+powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile "C:\Temp\CMPackagerTest\detect_after_$detectStep.json"
+set EXIT=%ERRORLEVEL%
+if exist "C:\Temp\CMPackagerTest\detect_after_$detectStep.json" copy /Y "C:\Temp\CMPackagerTest\detect_after_$detectStep.json" "C:\TestFiles\detect_after_$detectStep.json" >nul 2>&1
+if exist "C:\Temp\CMPackagerTest\detect_after_$detectStep.log"  copy /Y "C:\Temp\CMPackagerTest\detect_after_$detectStep.log"  "C:\TestFiles\detect_after_$detectStep.log"  >nul 2>&1
+exit /b %EXIT%
+"@ | Set-Content (Join-Path $WorkspacePath "detect_after_$detectStep.cmd") -Encoding ASCII
+    }
+    Write-Info "Generated: detect_after_install.cmd, detect_after_uninstall.cmd"
+
     # .wsb config — mapped folder only, no LogonCommand (orchestrated via wsb exec)
     $wsbContent = @"
 <Configuration>
@@ -1244,8 +1261,7 @@ if ($useWsbCli) {
     # ── Step 2: Detect after install ─────────────────────────────────────────────
     Write-Step "Step 2: Detection after install"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 2: Detection after install ---" | Add-Content $sandboxLog
-    $detectInstallCmd = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile C:\TestFiles\detect_after_install.json'
-    $detectInstallRc  = Invoke-SandboxExec 'Step 2: Detect after install' $detectInstallCmd
+    $detectInstallRc  = Invoke-SandboxExec 'Step 2: Detect after install' 'C:\TestFiles\detect_after_install.cmd'
     if ($detectInstallRc -eq -999) { Write-TimeoutResult 'Timed out during Step 2: Detection after install' }
 
     $detAfterInstall = [ordered]@{ Detected = ($detectInstallRc -eq 0); ClauseResults = @() }
@@ -1276,7 +1292,7 @@ if ($useWsbCli) {
         # Capped at 2 minutes; gives up and proceeds to Step 4 if it never clears.
         if ($installType -eq 'MSI') {
             Write-Step "Waiting for MSI installer service to clear registry..."
-            $pollDetectCmd = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile C:\TestFiles\detect_after_uninstall.json'
+            $pollDetectCmd = 'C:\TestFiles\detect_after_uninstall.cmd'
             $msiPollEnd = (Get-Date).AddMinutes(2)
             $msiCleared = $false
             while ((Get-Date) -lt $msiPollEnd -and (Get-Date) -lt $deadline) {
@@ -1294,8 +1310,7 @@ if ($useWsbCli) {
     # ── Step 4: Detect after uninstall ───────────────────────────────────────────
     Write-Step "Step 4: Detection after uninstall"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 4: Detection after uninstall ---" | Add-Content $sandboxLog
-    $detectUninstallCmd = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile C:\TestFiles\detect_after_uninstall.json'
-    $detectUninstallRc  = Invoke-SandboxExec 'Step 4: Detect after uninstall' $detectUninstallCmd
+    $detectUninstallRc  = Invoke-SandboxExec 'Step 4: Detect after uninstall' 'C:\TestFiles\detect_after_uninstall.cmd'
     if ($detectUninstallRc -eq -999) { Write-TimeoutResult 'Timed out during Step 4: Detection after uninstall' }
 
     $detAfterUninstall = [ordered]@{ Detected = ($detectUninstallRc -eq 0); ClauseResults = @() }
