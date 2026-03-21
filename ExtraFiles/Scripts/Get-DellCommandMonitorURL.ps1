@@ -25,7 +25,7 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Web
 
 # -- Configuration --------------------------------------------------------------
-$KbUrl      = 'https://www.dell.com/support/kbdoc/en-us/000177325/dell-command-monitor'
+$KbUrl      = 'https://www.dell.com/support/kbdoc/en-us/000177325/dell-command-update'
 $UA         = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 $TimeoutSec = 30
 
