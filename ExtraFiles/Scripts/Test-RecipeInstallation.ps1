@@ -656,6 +656,7 @@ exit /b %EXIT%
     $wsbContent = @"
 <Configuration>
   <MemoryInMB>8192</MemoryInMB>
+  <Networking>Disable</Networking>
   <MappedFolders>
     <MappedFolder>
       <HostFolder>$WorkspacePath</HostFolder>
@@ -1073,6 +1074,7 @@ powershell.exe -ExecutionPolicy Bypass -NonInteractive -File "C:\TestFiles\RunTe
     $wsbContent = @"
 <Configuration>
   <MemoryInMB>8192</MemoryInMB>
+  <Networking>Disable</Networking>
   <MappedFolders>
     <MappedFolder>
       <HostFolder>$WorkspacePath</HostFolder>
