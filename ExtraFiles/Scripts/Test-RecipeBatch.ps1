@@ -112,7 +112,8 @@ Write-Host "  Results CSV    : $csvPath" -ForegroundColor Gray
 Write-Host '══════════════════════════════════════════════════════════' -ForegroundColor White
 Write-Host ''
 
-$allResults = [System.Collections.Generic.List[PSCustomObject]]::new()
+$allResults      = [System.Collections.Generic.List[PSCustomObject]]::new()
+$batchStartTime  = Get-Date
 $i = 0
 
 foreach ($recipeFile in $recipeFiles) {
@@ -136,10 +137,13 @@ foreach ($recipeFile in $recipeFiles) {
 
     # ── Banner ─────────────────────────────────────────────────────────────────
 
-    $indexLabel = "[$i/$total]"
+    $batchElapsed  = (Get-Date) - $batchStartTime
+    $batchTime     = '{0}h {1:d2}m' -f [int]$batchElapsed.TotalHours, $batchElapsed.Minutes
+    $indexLabel    = "[$i/$total]"
     Write-Host ''
     Write-Host '──────────────────────────────────────────────────────────' -ForegroundColor DarkGray
-    Write-Host "  $indexLabel $appName" -ForegroundColor Cyan
+    Write-Host "  $indexLabel $appName" -NoNewline -ForegroundColor Cyan
+    Write-Host "  (batch elapsed: $batchTime)" -ForegroundColor DarkGray
     Write-Host "  Recipe: $($recipeFile.Name)" -ForegroundColor DarkGray
     Write-Host ''
 

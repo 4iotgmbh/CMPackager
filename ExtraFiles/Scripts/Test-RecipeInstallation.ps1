@@ -1112,11 +1112,59 @@ $timedOut    = $false
 
 if ($useWsbCli) {
     # ── wsb.exe path (Windows 11 24H2+): exec-based orchestration ────────────────
-    # Each test step is driven from the host via wsb exec -r System.
+    # Each test step is driven from the host via wsb exec --run-as System.
     # Results are collected directly — no polling for a results file.
     # All scripts run in System context, matching ConfigMgr deployment behaviour.
 
-    # Stop any sandbox already running before launching the new one.
+    # ── Helpers ───────────────────────────────────────────────────────────────────
+
+    # Pre-initialise result variables so Write-TimeoutResult can always serialise them.
+    $installExitCode   = $null;  $installSuccess   = $null
+    $detAfterInstall   = [ordered]@{ Detected = $null; ClauseResults = @() }
+    $uninstallExitCode = $null;  $uninstallSuccess = $null
+    $detAfterUninstall = [ordered]@{ Detected = $null; ClauseResults = @() }
+
+    # Invoke-SandboxExec — runs a wsb exec step and enforces the per-test deadline.
+    # Uses Start-Process + WaitForExit so a stuck step can be killed when time runs out.
+    # Returns the process exit code, or -999 when the deadline is reached.
+    function Invoke-SandboxExec {
+        param([string]$StepLabel, [string]$Command)
+        $remaining = [int]([datetime]$deadline - (Get-Date)).TotalSeconds
+        if ($remaining -le 5) {
+            Write-Host "  $(Get-ElapsedPrefix) [TIMEOUT] Deadline reached before '$StepLabel'." -ForegroundColor Yellow
+            return -999
+        }
+        $argList = @('exec', '--id', $sandboxId, '--command', $Command, '--run-as', 'System')
+        $proc    = Start-Process -FilePath $wsbCliPath -ArgumentList $argList -NoNewWindow -PassThru
+        if ($proc.WaitForExit($remaining * 1000)) { return $proc.ExitCode }
+        try { $proc.Kill() } catch {}
+        Write-Host "  $(Get-ElapsedPrefix) [TIMEOUT] '$StepLabel' exceeded the per-test deadline." -ForegroundColor Yellow
+        return -999
+    }
+
+    # Write-TimeoutResult — persists a TIMEOUT result and stops the sandbox.
+    function Write-TimeoutResult {
+        param([string]$Reason)
+        Write-Host "  $(Get-ElapsedPrefix) [TIMEOUT] $Reason" -ForegroundColor Yellow
+        "$((Get-Date -Format 'HH:mm:ss')) TIMEOUT: $Reason" | Add-Content $sandboxLog
+        [ordered]@{
+            Application             = $appName
+            DeploymentType          = $depTypeName
+            Timestamp               = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+            InstallExitCode         = $installExitCode
+            InstallSuccess          = $installSuccess
+            DetectionAfterInstall   = $detAfterInstall
+            UninstallExitCode       = $uninstallExitCode
+            UninstallSuccess        = $uninstallSuccess
+            DetectionAfterUninstall = $detAfterUninstall
+            OverallResult           = 'TIMEOUT'
+            Notes                   = @($Reason)
+        } | ConvertTo-Json -Depth 10 | Set-Content $resultsFile -Encoding UTF8
+        & $wsbCliPath stop --id $sandboxId 2>&1 | Out-Null
+        exit 1
+    }
+
+    # ── Stop any stale sandboxes ──────────────────────────────────────────────────
     $staleIds = & $wsbCliPath list 2>&1 | Where-Object { $_ -match '^[0-9a-fA-F]{8}-' }
     foreach ($staleId in $staleIds) {
         Write-Info "Stopping stale sandbox $staleId before launch..."
@@ -1124,7 +1172,7 @@ if ($useWsbCli) {
     }
     if ($staleIds) { Start-Sleep -Seconds 3 }
 
-    # Launch and capture the sandbox ID.
+    # ── Launch ───────────────────────────────────────────────────────────────────
     # wsb start --config takes the WSB XML content as an inline string, not a file path.
     # Collapse to a single line — some builds of wsb.exe reject multi-line arguments.
     # wsb start outputs:  "Windows Sandbox environment started successfully:\nId: <guid>"
@@ -1153,7 +1201,7 @@ if ($useWsbCli) {
     }
     Write-Host ""
     if (-not $sandboxReady) {
-        Write-Error "Sandbox did not become ready within 5 minutes."
+        Write-Host "`n  [ERROR] Sandbox did not become ready within 5 minutes." -ForegroundColor Red
         & $wsbCliPath stop --id $sandboxId 2>&1 | Out-Null
         exit 1
     }
@@ -1164,26 +1212,25 @@ if ($useWsbCli) {
     # ── Step 1: Install ──────────────────────────────────────────────────────────
     Write-Step "Step 1: Install"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 1: Install ---" | Add-Content $sandboxLog
-    $null = & $wsbCliPath exec --id $sandboxId --command 'C:\TestFiles\install.cmd' --run-as System 2>&1
-    $installExitCode = $LASTEXITCODE
-    $installSuccess  = $installExitCode -in @(0, 3010, 1641)
+    $installExitCode = Invoke-SandboxExec 'Step 1: Install' 'C:\TestFiles\install.cmd'
+    if ($installExitCode -eq -999) { Write-TimeoutResult 'Timed out during Step 1: Install' }
+    $installSuccess = $installExitCode -in @(0, 3010, 1641)
     Write-Info "Install exit code: $installExitCode ($(if ($installSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
 
-    # MSI only: wait for Windows Installer to commit before detecting
-    if ($installType -eq 'MSI') {
-        Write-Step "Waiting for MSI installer event (1033)..."
-        $msiWaitMins = [math]::Max(5, $TimeoutMinutes - 10)
-        $msiWaitCmd  = "powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\WaitMsiEvent.ps1 -EventIds 1033 -TimeoutMinutes $msiWaitMins"
-        $null = & $wsbCliPath exec --id $sandboxId --command $msiWaitCmd --run-as System 2>&1
-    }
+    # MSI only: wsb exec is synchronous and msiexec /qn is synchronous, so the
+    # registry is committed before exec returns. A brief sleep ensures any
+    # transient caches flush before detection. (WaitMsiEvent was removed because
+    # MsiInstaller event 1033/1034 does not appear reliably in the sandbox event log.)
+    if ($installType -eq 'MSI') { Start-Sleep -Seconds 10 }
 
     # ── Step 2: Detect after install ─────────────────────────────────────────────
     Write-Step "Step 2: Detection after install"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 2: Detection after install ---" | Add-Content $sandboxLog
     $detectInstallCmd = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile C:\TestFiles\detect_after_install.json'
-    $null = & $wsbCliPath exec --id $sandboxId --command $detectInstallCmd --run-as System 2>&1
+    $detectInstallRc  = Invoke-SandboxExec 'Step 2: Detect after install' $detectInstallCmd
+    if ($detectInstallRc -eq -999) { Write-TimeoutResult 'Timed out during Step 2: Detection after install' }
 
-    $detAfterInstall = [ordered]@{ Detected = ($LASTEXITCODE -eq 0); ClauseResults = @() }
+    $detAfterInstall = [ordered]@{ Detected = ($detectInstallRc -eq 0); ClauseResults = @() }
     $detAfterInstallJson = Join-Path $WorkspacePath 'detect_after_install.json'
     if (Test-Path $detAfterInstallJson) {
         try { $detAfterInstall = Get-Content $detAfterInstallJson -Raw | ConvertFrom-Json } catch {}
@@ -1199,25 +1246,22 @@ if ($useWsbCli) {
     } else {
         Write-Step "Step 3: Uninstall"
         "$((Get-Date -Format 'HH:mm:ss')) --- Step 3: Uninstall ---" | Add-Content $sandboxLog
-        $null = & $wsbCliPath exec --id $sandboxId --command 'C:\TestFiles\uninstall.cmd' --run-as System 2>&1
-        $uninstallExitCode = $LASTEXITCODE
-        $uninstallSuccess  = $uninstallExitCode -in @(0, 3010, 1641)
+        $uninstallExitCode = Invoke-SandboxExec 'Step 3: Uninstall' 'C:\TestFiles\uninstall.cmd'
+        if ($uninstallExitCode -eq -999) { Write-TimeoutResult 'Timed out during Step 3: Uninstall' }
+        $uninstallSuccess = $uninstallExitCode -in @(0, 3010, 1641)
         Write-Info "Uninstall exit code: $uninstallExitCode ($(if ($uninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
 
-        if ($installType -eq 'MSI') {
-            Write-Step "Waiting for MSI installer event (1034)..."
-            $msiWaitCmd2 = "powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\WaitMsiEvent.ps1 -EventIds 1034 -TimeoutMinutes $msiWaitMins"
-            $null = & $wsbCliPath exec --id $sandboxId --command $msiWaitCmd2 --run-as System 2>&1
-        }
+        if ($installType -eq 'MSI') { Start-Sleep -Seconds 10 }
     }
 
     # ── Step 4: Detect after uninstall ───────────────────────────────────────────
     Write-Step "Step 4: Detection after uninstall"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 4: Detection after uninstall ---" | Add-Content $sandboxLog
     $detectUninstallCmd = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile C:\TestFiles\detect_after_uninstall.json'
-    $null = & $wsbCliPath exec --id $sandboxId --command $detectUninstallCmd --run-as System 2>&1
+    $detectUninstallRc  = Invoke-SandboxExec 'Step 4: Detect after uninstall' $detectUninstallCmd
+    if ($detectUninstallRc -eq -999) { Write-TimeoutResult 'Timed out during Step 4: Detection after uninstall' }
 
-    $detAfterUninstall = [ordered]@{ Detected = ($LASTEXITCODE -eq 0); ClauseResults = @() }
+    $detAfterUninstall = [ordered]@{ Detected = ($detectUninstallRc -eq 0); ClauseResults = @() }
     $detAfterUninstallJson = Join-Path $WorkspacePath 'detect_after_uninstall.json'
     if (Test-Path $detAfterUninstallJson) {
         try { $detAfterUninstall = Get-Content $detAfterUninstallJson -Raw | ConvertFrom-Json } catch {}
@@ -1225,9 +1269,9 @@ if ($useWsbCli) {
     Write-Info "Detected after uninstall: $($detAfterUninstall.Detected)"
 
     # ── Step 5: Compute overall result and write results.json ────────────────────
-    $installOk  = $installSuccess -eq $true
-    $detAfterOk = $detAfterInstall.Detected   -eq $true
-    $detAfterUn = $detAfterUninstall.Detected -eq $false   # NOT detected = good
+    $installOk   = $installSuccess -eq $true
+    $detAfterOk  = $detAfterInstall.Detected   -eq $true
+    $detAfterUn  = $detAfterUninstall.Detected -eq $false   # NOT detected = good
     $uninstallOk = ($uninstallSuccess -eq $true) -or ($null -eq $uninstallSuccess)
 
     $overallResult = if ($installOk -and $detAfterOk -and $uninstallOk -and $detAfterUn) {
