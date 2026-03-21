@@ -11,13 +11,16 @@
 		<Download DeploymentType="DeploymentType1">
 			<PrefetchScript><![CDATA[
 # Locate Get-DellCommandMonitorURL.ps1 relative to the calling script.
-# When called from CMPackager.ps1 (repo root): ExtraFiles\Scripts\Get-DellCommandMonitorURL.ps1
-# When called from Test-RecipeInstallation.ps1 (ExtraFiles\Scripts\): Get-DellCommandMonitorURL.ps1
-$helper = Join-Path $PSScriptRoot 'ExtraFiles\Scripts\Get-DellCommandMonitorURL.ps1'
-if (-not (Test-Path $helper)) {
-    $helper = Join-Path $PSScriptRoot 'Get-DellCommandMonitorURL.ps1'
+# $PSScriptRoot may be null inside Invoke-Expression; fall back to $CMPackagerScriptRoot
+# which Test-RecipeInstallation.ps1 injects before running PrefetchScripts.
+# From CMPackager.ps1 (repo root) the helper is under ExtraFiles\Scripts\;
+# from Test-RecipeInstallation.ps1 (ExtraFiles\Scripts\) it is in the same folder.
+$_prefetchRoot = if ($PSScriptRoot) { $PSScriptRoot } elseif ($CMPackagerScriptRoot) { $CMPackagerScriptRoot }
+$helper = if ($_prefetchRoot) { Join-Path $_prefetchRoot 'ExtraFiles\Scripts\Get-DellCommandMonitorURL.ps1' }
+if (-not $helper -or -not (Test-Path $helper)) {
+    $helper = if ($_prefetchRoot) { Join-Path $_prefetchRoot 'Get-DellCommandMonitorURL.ps1' }
 }
-if (-not (Test-Path $helper)) {
+if (-not $helper -or -not (Test-Path $helper)) {
     Write-Error 'Cannot find Get-DellCommandMonitorURL.ps1'
     return
 }

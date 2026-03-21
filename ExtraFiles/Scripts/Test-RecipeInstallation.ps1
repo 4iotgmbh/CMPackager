@@ -327,6 +327,11 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
         }
 
         # Execute PrefetchScript — it is expected to set $URL in the current scope
+        # $PSScriptRoot is an automatic variable that is not inherited inside Invoke-Expression.
+        # Expose the script directory as $CMPackagerScriptRoot so PrefetchScripts that call helper
+        # scripts (e.g. via powershell.exe -File (Join-Path $CMPackagerScriptRoot ...)) can resolve
+        # paths correctly without relying on $PSScriptRoot.
+        $CMPackagerScriptRoot = $PSScriptRoot
         $URL = $null
         try {
             Invoke-Expression $prefetchScript | Out-Null
