@@ -192,7 +192,14 @@ if ($useWsbCli) {
 #region ── Parse Recipe ──────────────────────────────────────────────────────────
 
 Write-Step "Parsing recipe: $RecipePath"
-[xml]$recipe = Get-Content -Path $RecipePath -Raw
+try {
+    [xml]$recipe = Get-Content -Path $RecipePath -Raw
+} catch {
+    Write-Host "  [ERROR] Recipe XML is invalid and cannot be parsed: $_" -ForegroundColor Red
+    Write-Host "          Check for unescaped characters in PrefetchScript or other text nodes." -ForegroundColor Red
+    Write-Host "          Use &lt; for <, &gt; for >, &amp; for & in XML content." -ForegroundColor Red
+    exit 1
+}
 
 $appName = $recipe.ApplicationDef.Application.Name
 
