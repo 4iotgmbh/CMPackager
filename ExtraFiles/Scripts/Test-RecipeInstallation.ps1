@@ -438,7 +438,9 @@ $LogPath = [System.IO.Path]::ChangeExtension($OutputFile, '.log')
 function Write-Log {
     param([string]$Message)
     $ts = Get-Date -Format 'HH:mm:ss'
-    "$ts $Message" | Tee-Object -FilePath $LogPath -Append | Write-Host
+    $line = "$ts $Message"
+    Write-Host $line
+    Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue
 }
 
 function Get-MSIProductCode {
@@ -1490,7 +1492,7 @@ if (Test-Path $sandboxLog) {
     Write-Info "Sandbox log: $sandboxLog"
 }
 Write-Info "Results JSON: $resultsFile"
-foreach ($logName in @('install.log', 'uninstall.log')) {
+foreach ($logName in @('install.log', 'uninstall.log', 'detect_after_install.log', 'detect_after_uninstall.log')) {
     $logPath = Join-Path $WorkspacePath $logName
     if (Test-Path $logPath) {
         Write-Info "${logName}: $logPath"
