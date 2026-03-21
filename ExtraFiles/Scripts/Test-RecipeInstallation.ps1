@@ -219,6 +219,15 @@ Write-Info "Application     : $appName"
 Write-Info "Deployment type : $depTypeName ($installType)"
 Write-Info "Detection method: $detMethodType"
 
+# TODO: implement Custom/CustomScript detection testing.
+# Custom detection clauses (File, Registry, MSI product-code checks) require mapping SCCM's
+# clause XML into Detect.ps1 equivalents.  This is non-trivial for the full set of operators
+# and property types, so for now recipes that use Custom or CustomScript detection are skipped.
+if ($detMethodType -in @('Custom', 'CustomScript')) {
+    Write-Warning "Custom detection method is not yet supported by this tester — skipping recipe."
+    exit 2
+}
+
 # Build the install command
 if ([string]::IsNullOrWhiteSpace($installProgram)) {
     if ($installType -eq 'MSI' -and -not [string]::IsNullOrWhiteSpace($installationMSI)) {
