@@ -436,6 +436,9 @@ if ($useWsbCli) {
 @echo off
 REG add HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState /t REG_DWORD /d 0 /f
 CiTool -r <NUL
+mkdir C:\Temp\CMPackagerTest 2>nul
+copy /Y "C:\TestFiles\Detect.ps1"              "C:\Temp\CMPackagerTest\Detect.ps1"              >nul 2>&1
+copy /Y "C:\TestFiles\detection_clauses.json"  "C:\Temp\CMPackagerTest\detection_clauses.json"  >nul 2>&1
 '@ | Set-Content (Join-Path $WorkspacePath 'sandbox_setup.cmd') -Encoding ASCII
     Write-Info "Generated: sandbox_setup.cmd"
 
@@ -567,7 +570,7 @@ function Test-DetectionClauses {
             'MSI' {
                 $productCode = $clause.ProductCode
                 if ([string]::IsNullOrWhiteSpace($productCode)) {
-                    $msiFullPath = "C:\TestFiles\$($clause.InstallerFile)"
+                    $msiFullPath = "C:\Temp\CMPackagerTest\$($clause.InstallerFile)"
                     Write-Log "Extracting ProductCode from $msiFullPath"
                     $pc = Get-MSIProductCode $msiFullPath
                     $productCode = if ($null -ne $pc) { $pc.Trim() } else { '' }
@@ -588,7 +591,7 @@ function Test-DetectionClauses {
 }
 
 # ── Load and normalise detection clauses from JSON ───────────────────────────
-$clausesRaw = Get-Content 'C:\TestFiles\detection_clauses.json' -Raw | ConvertFrom-Json
+$clausesRaw = Get-Content 'C:\Temp\CMPackagerTest\detection_clauses.json' -Raw | ConvertFrom-Json
 $DetectionClauses = $clausesRaw | ForEach-Object {
     $ht = @{}
     $_.PSObject.Properties | ForEach-Object { $ht[$_.Name] = $_.Value }
@@ -674,7 +677,7 @@ exit /b %EXIT%
         @"
 @echo off
 mkdir C:\Temp\CMPackagerTest 2>nul
-powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile "C:\Temp\CMPackagerTest\detect_after_$detectStep.json"
+powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\Temp\CMPackagerTest\Detect.ps1 -OutputFile "C:\Temp\CMPackagerTest\detect_after_$detectStep.json"
 set EXIT=%ERRORLEVEL%
 if exist "C:\Temp\CMPackagerTest\detect_after_$detectStep.json" copy /Y "C:\Temp\CMPackagerTest\detect_after_$detectStep.json" "C:\TestFiles\detect_after_$detectStep.json" >nul 2>&1
 if exist "C:\Temp\CMPackagerTest\detect_after_$detectStep.log"  copy /Y "C:\Temp\CMPackagerTest\detect_after_$detectStep.log"  "C:\TestFiles\detect_after_$detectStep.log"  >nul 2>&1
@@ -1301,26 +1304,9 @@ if ($useWsbCli) {
         $uninstallSuccess = $uninstallExitCode -in @(0, 3010, 1641)
         Write-Info "Uninstall exit code: $uninstallExitCode ($(if ($uninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
 
-        # MSI uninstallers hand off to the Windows Installer service and return
-        # exit code 0 within ~1 second while the actual registry cleanup is still
-        # in progress asynchronously.  Poll Detect.ps1 until the product disappears
-        # (exit 1 = not detected), honouring the overall per-test deadline.
-        # Capped at 2 minutes; gives up and proceeds to Step 4 if it never clears.
-        if ($installType -eq 'MSI') {
-            Write-Step "Waiting for MSI installer service to clear registry..."
-            $pollDetectCmd = 'C:\TestFiles\detect_after_uninstall.cmd'
-            $msiPollEnd = (Get-Date).AddMinutes(2)
-            $msiCleared = $false
-            while ((Get-Date) -lt $msiPollEnd -and (Get-Date) -lt $deadline) {
-                $pollRc = Invoke-SandboxExec 'MSI cleanup poll' $pollDetectCmd
-                if ($pollRc -eq -999) { Write-TimeoutResult 'Timed out waiting for MSI uninstall registry cleanup' }
-                if ($pollRc -ne 0) { $msiCleared = $true; break }   # exit 1 = product gone
-                Start-Sleep -Seconds 5
-            }
-            if (-not $msiCleared) {
-                Write-Info "MSI cleanup poll: product still detected after 2 min — proceeding to Step 4 anyway."
-            }
-        }
+        # Brief pause for the Windows Installer service to commit registry cleanup.
+        # Manual testing shows the uninstall key vanishes immediately; 5 s is ample.
+        if ($installType -eq 'MSI') { Start-Sleep -Seconds 5 }
     }
 
     # ── Step 4: Detect after uninstall ───────────────────────────────────────────
