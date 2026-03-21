@@ -1344,39 +1344,54 @@ if ($useWsbCli) {
     }
     Write-Info "Detected after install: $($detAfterInstall.Detected)"
 
-    # ── Step 3: Uninstall ────────────────────────────────────────────────────────
+    # ── Steps 3 & 4: Uninstall + detect after uninstall ─────────────────────────
+    # Only run if install succeeded AND the app was detected after install.
+    # If either precondition fails the test is already a FAIL; skipping uninstall
+    # avoids side-effects on a partially installed app and keeps the result clear.
     $uninstallExitCode = $null
     $uninstallSuccess  = $null
-    if ([string]::IsNullOrWhiteSpace($uninstallCmd)) {
-        Write-Info "No uninstall command — skipping uninstall step."
-        "$((Get-Date -Format 'HH:mm:ss')) --- Step 3: Uninstall skipped (no command) ---" | Add-Content $sandboxLog
-    } else {
-        Write-Step "Step 3: Uninstall"
-        "$((Get-Date -Format 'HH:mm:ss')) --- Step 3: Uninstall ---" | Add-Content $sandboxLog
-        $uninstallExitCode = Invoke-SandboxExec 'Step 3: Uninstall' 'C:\TestFiles\uninstall.cmd'
-        if ($uninstallExitCode -eq -999) { Write-TimeoutResult 'Timed out during Step 3: Uninstall' }
-        $uninstallSuccess = $uninstallExitCode -in @(0, 3010, 1641)
-        Write-Info "Uninstall exit code: $uninstallExitCode ($(if ($uninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
-
-        # Brief pause for the Windows Installer service to commit registry cleanup.
-        # Manual testing shows the uninstall key vanishes immediately; 5 s is ample.
-        if ($installType -eq 'MSI') { Start-Sleep -Seconds 5 }
-    }
-
-    # ── Step 4: Detect after uninstall ───────────────────────────────────────────
-    Write-Step "Step 4: Detection after uninstall"
-    "$((Get-Date -Format 'HH:mm:ss')) --- Step 4: Detection after uninstall ---" | Add-Content $sandboxLog
-    $detectUninstallRc  = Invoke-SandboxExec 'Step 4: Detect after uninstall' 'C:\TestFiles\detect_after_uninstall.cmd'
-    if ($detectUninstallRc -eq -999) { Write-TimeoutResult 'Timed out during Step 4: Detection after uninstall' }
-
     $detAfterUninstall = [ordered]@{ Detected = $null; ClauseResults = @() }
-    $detAfterUninstallJson = Join-Path $WorkspacePath 'detect_after_uninstall.json'
-    if (Test-Path $detAfterUninstallJson) {
-        try { $detAfterUninstall = Get-Content $detAfterUninstallJson -Raw | ConvertFrom-Json } catch {}
+
+    if ($installSuccess -ne $true -or $detAfterInstall.Detected -ne $true) {
+        $skipReason = if ($installSuccess -ne $true) {
+            "install failed (exit code $installExitCode)"
+        } else {
+            "app not detected after install"
+        }
+        Write-Info "Skipping Steps 3 & 4 — $skipReason."
+        "$((Get-Date -Format 'HH:mm:ss')) --- Steps 3 & 4 skipped: $skipReason ---" | Add-Content $sandboxLog
     } else {
-        Write-Info "detect_after_uninstall.json not produced (wsb exec rc: $detectUninstallRc) — check sandbox.log"
+        # ── Step 3: Uninstall ────────────────────────────────────────────────────
+        if ([string]::IsNullOrWhiteSpace($uninstallCmd)) {
+            Write-Info "No uninstall command — skipping uninstall step."
+            "$((Get-Date -Format 'HH:mm:ss')) --- Step 3: Uninstall skipped (no command) ---" | Add-Content $sandboxLog
+        } else {
+            Write-Step "Step 3: Uninstall"
+            "$((Get-Date -Format 'HH:mm:ss')) --- Step 3: Uninstall ---" | Add-Content $sandboxLog
+            $uninstallExitCode = Invoke-SandboxExec 'Step 3: Uninstall' 'C:\TestFiles\uninstall.cmd'
+            if ($uninstallExitCode -eq -999) { Write-TimeoutResult 'Timed out during Step 3: Uninstall' }
+            $uninstallSuccess = $uninstallExitCode -in @(0, 3010, 1641)
+            Write-Info "Uninstall exit code: $uninstallExitCode ($(if ($uninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
+
+            # Brief pause for the Windows Installer service to commit registry cleanup.
+            # Manual testing shows the uninstall key vanishes immediately; 5 s is ample.
+            if ($installType -eq 'MSI') { Start-Sleep -Seconds 5 }
+        }
+
+        # ── Step 4: Detect after uninstall ───────────────────────────────────────
+        Write-Step "Step 4: Detection after uninstall"
+        "$((Get-Date -Format 'HH:mm:ss')) --- Step 4: Detection after uninstall ---" | Add-Content $sandboxLog
+        $detectUninstallRc  = Invoke-SandboxExec 'Step 4: Detect after uninstall' 'C:\TestFiles\detect_after_uninstall.cmd'
+        if ($detectUninstallRc -eq -999) { Write-TimeoutResult 'Timed out during Step 4: Detection after uninstall' }
+
+        $detAfterUninstallJson = Join-Path $WorkspacePath 'detect_after_uninstall.json'
+        if (Test-Path $detAfterUninstallJson) {
+            try { $detAfterUninstall = Get-Content $detAfterUninstallJson -Raw | ConvertFrom-Json } catch {}
+        } else {
+            Write-Info "detect_after_uninstall.json not produced (wsb exec rc: $detectUninstallRc) — check sandbox.log"
+        }
+        Write-Info "Detected after uninstall: $($detAfterUninstall.Detected)"
     }
-    Write-Info "Detected after uninstall: $($detAfterUninstall.Detected)"
 
     # ── Step 5: Compute overall result and write results.json ────────────────────
     $installOk   = $installSuccess -eq $true
