@@ -433,7 +433,7 @@ if ($useWsbCli) {
 # Exits: 0 = application detected, 1 = not detected
 param([string]$OutputFile = 'C:\TestFiles\detect_result.json')
 $ErrorActionPreference = 'Continue'
-$LogPath = 'C:\TestFiles\sandbox.log'
+$LogPath = 'C:\TestFiles\detect.log'
 
 function Write-Log {
     param([string]$Message)
@@ -1263,7 +1263,26 @@ if ($useWsbCli) {
         $uninstallSuccess = $uninstallExitCode -in @(0, 3010, 1641)
         Write-Info "Uninstall exit code: $uninstallExitCode ($(if ($uninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
 
-        if ($installType -eq 'MSI') { Start-Sleep -Seconds 10 }
+        # MSI uninstallers hand off to the Windows Installer service and return
+        # exit code 0 within ~1 second while the actual registry cleanup is still
+        # in progress asynchronously.  Poll Detect.ps1 until the product disappears
+        # (exit 1 = not detected), honouring the overall per-test deadline.
+        # Capped at 2 minutes; gives up and proceeds to Step 4 if it never clears.
+        if ($installType -eq 'MSI') {
+            Write-Step "Waiting for MSI installer service to clear registry..."
+            $pollDetectCmd = 'powershell.exe -ExecutionPolicy Bypass -NonInteractive -File C:\TestFiles\Detect.ps1 -OutputFile C:\TestFiles\detect_after_uninstall.json'
+            $msiPollEnd = (Get-Date).AddMinutes(2)
+            $msiCleared = $false
+            while ((Get-Date) -lt $msiPollEnd -and (Get-Date) -lt $deadline) {
+                $pollRc = Invoke-SandboxExec 'MSI cleanup poll' $pollDetectCmd
+                if ($pollRc -eq -999) { Write-TimeoutResult 'Timed out waiting for MSI uninstall registry cleanup' }
+                if ($pollRc -ne 0) { $msiCleared = $true; break }   # exit 1 = product gone
+                Start-Sleep -Seconds 5
+            }
+            if (-not $msiCleared) {
+                Write-Info "MSI cleanup poll: product still detected after 2 min — proceeding to Step 4 anyway."
+            }
+        }
     }
 
     # ── Step 4: Detect after uninstall ───────────────────────────────────────────
