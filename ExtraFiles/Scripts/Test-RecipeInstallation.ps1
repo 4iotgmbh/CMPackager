@@ -1112,7 +1112,7 @@ $timedOut    = $false
 
 if ($useWsbCli) {
     # ── wsb.exe path (Windows 11 24H2+): exec-based orchestration ────────────────
-    # Each test step is driven from the host via wsb exec --run-as System.
+    # Each test step is driven from the host via wsb exec -r System.
     # Results are collected directly — no polling for a results file.
     # All scripts run in System context, matching ConfigMgr deployment behaviour.
 
@@ -1125,7 +1125,8 @@ if ($useWsbCli) {
     $detAfterUninstall = [ordered]@{ Detected = $null; ClauseResults = @() }
 
     # Invoke-SandboxExec — runs a wsb exec step and enforces the per-test deadline.
-    # Uses Start-Process + WaitForExit so a stuck step can be killed when time runs out.
+    # Uses Start-Job + Wait-Job so the & operator handles argument quoting correctly
+    # (Start-Process -ArgumentList splits multi-word --command values on spaces).
     # Returns the process exit code, or -999 when the deadline is reached.
     function Invoke-SandboxExec {
         param([string]$StepLabel, [string]$Command)
@@ -1134,10 +1135,21 @@ if ($useWsbCli) {
             Write-Host "  $(Get-ElapsedPrefix) [TIMEOUT] Deadline reached before '$StepLabel'." -ForegroundColor Yellow
             return -999
         }
-        $argList = @('exec', '--id', $sandboxId, '--command', $Command, '--run-as', 'System')
-        $proc    = Start-Process -FilePath $wsbCliPath -ArgumentList $argList -NoNewWindow -PassThru
-        if ($proc.WaitForExit($remaining * 1000)) { return $proc.ExitCode }
-        try { $proc.Kill() } catch {}
+        # Capture variables for the job scope.
+        $wsbP = $wsbCliPath; $sbId = $sandboxId
+        $job = Start-Job -ScriptBlock {
+            param($p, $id, $cmd)
+            $null = & $p exec --id $id -c $cmd -r System 2>&1
+            $LASTEXITCODE
+        } -ArgumentList $wsbP, $sbId, $Command
+
+        $done = $job | Wait-Job -Timeout $remaining
+        if ($done) {
+            $rc = [int](($job | Receive-Job) | Select-Object -Last 1)
+            $job | Remove-Job -Force
+            return $rc
+        }
+        $job | Stop-Job; $job | Remove-Job -Force
         Write-Host "  $(Get-ElapsedPrefix) [TIMEOUT] '$StepLabel' exceeded the per-test deadline." -ForegroundColor Yellow
         return -999
     }
@@ -1195,7 +1207,7 @@ if ($useWsbCli) {
     $sandboxReady  = $false
     while (-not $sandboxReady -and (Get-Date) -lt $readyDeadline) {
         Start-Sleep -Seconds 5
-        $null = & $wsbCliPath exec --id $sandboxId --command 'cmd /c exit 0' --run-as System 2>&1
+        $null = & $wsbCliPath exec --id $sandboxId -c 'cmd /c exit 0' -r System 2>&1
         if ($LASTEXITCODE -eq 0) { $sandboxReady = $true }
         else { Write-Host '.' -NoNewline -ForegroundColor Cyan }
     }
