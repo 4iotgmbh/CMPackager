@@ -112,6 +112,33 @@ Write-Host "  Results CSV    : $csvPath" -ForegroundColor Gray
 Write-Host '══════════════════════════════════════════════════════════' -ForegroundColor White
 Write-Host ''
 
+# ── GitHub rate-limit helper ───────────────────────────────────────────────────
+# Many recipes call Get-InstallerURLfromWinget which queries the GitHub REST API.
+# Unauthenticated callers are capped at 60 requests/hour; batch runs exhaust this
+# quickly.  Before each test, check the remaining quota.  When it reaches zero,
+# sleep until the reset timestamp reported by the API.
+function Wait-GitHubRateLimit {
+    try {
+        $rl   = Invoke-RestMethod -Uri 'https://api.github.com/rate_limit' -ErrorAction Stop
+        $core = $rl.rate   # top-level 'rate' mirrors resources.core
+        if ($core.remaining -le 5) {
+            $resetAt = [DateTimeOffset]::FromUnixTimeSeconds($core.reset)
+            $waitSec = [int](($resetAt - [DateTimeOffset]::UtcNow).TotalSeconds) + 10
+            if ($waitSec -gt 0) {
+                $waitMin = [int]($waitSec / 60)
+                $waitS   = $waitSec % 60
+                Write-Host ("  GitHub rate limit exhausted (resets at {0}). Waiting {1} min {2} sec..." -f `
+                    $resetAt.LocalDateTime.ToString('HH:mm:ss'), $waitMin, $waitS) -ForegroundColor DarkYellow
+                Start-Sleep -Seconds $waitSec
+                Write-Host '  Rate limit wait complete. Resuming batch.' -ForegroundColor DarkGray
+            }
+        }
+    } catch {
+        # Non-fatal — if the check itself fails, continue and let the recipe
+        # surface any resulting 403 in the normal error path.
+    }
+}
+
 $allResults      = [System.Collections.Generic.List[PSCustomObject]]::new()
 $batchStartTime  = Get-Date
 $i = 0
@@ -152,6 +179,17 @@ foreach ($recipeFile in $recipeFiles) {
 
     $safeName = $recipeFile.BaseName -replace '[^\w\-]', '_'
     $workspace = Join-Path $batchWorkspaceRoot $safeName
+
+    # Clear the workspace before every test so that a stale results.json from a
+    # previous batch run cannot produce a false PASS/FAIL if this run fails before
+    # the sandbox starts (e.g. PrefetchScript download failure).
+    if (Test-Path $workspace) {
+        Remove-Item $workspace -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # Check GitHub API rate limit before running — many recipes call
+    # Get-InstallerURLfromWinget which consumes quota.  Sleep until reset if low.
+    Wait-GitHubRateLimit
 
     # ── Run test ───────────────────────────────────────────────────────────────
 
