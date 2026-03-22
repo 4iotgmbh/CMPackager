@@ -865,6 +865,7 @@ $installCmdBatch
 set EXIT=%ERRORLEVEL%
 if exist install.log copy /Y install.log "C:\TestFiles\install.log" >nul 2>&1
 echo [%TIME%] Install exit code: %EXIT% >>C:\TestFiles\sandbox.log
+echo %EXIT%> "C:\TestFiles\install.exitcode"
 exit /b %EXIT%
 "@ | Set-Content (Join-Path $WorkspacePath 'install.cmd') -Encoding ASCII
     Write-Info "Generated: install.cmd"
@@ -880,6 +881,7 @@ $uninstallCmdBatch
 set EXIT=%ERRORLEVEL%
 if exist uninstall.log copy /Y uninstall.log "C:\TestFiles\uninstall.log" >nul 2>&1
 echo [%TIME%] Uninstall exit code: %EXIT% >>C:\TestFiles\sandbox.log
+echo %EXIT%> "C:\TestFiles\uninstall.exitcode"
 exit /b %EXIT%
 "@ | Set-Content (Join-Path $WorkspacePath 'uninstall.cmd') -Encoding ASCII
         Write-Info "Generated: uninstall.cmd"
@@ -1488,8 +1490,14 @@ if ($useWsbCli) {
     # ── Step 1: Install ──────────────────────────────────────────────────────────
     Write-Step "Step 1: Install"
     "$((Get-Date -Format 'HH:mm:ss')) --- Step 1: Install ---" | Add-Content $sandboxLog
-    $installExitCode = Invoke-SandboxExec 'Step 1: Install' 'C:\TestFiles\install.cmd'
-    if ($installExitCode -eq -999) { Write-TimeoutResult 'Timed out during Step 1: Install' }
+    $null = Invoke-SandboxExec 'Step 1: Install' 'C:\TestFiles\install.cmd'
+    # wsb exec always returns 0 — read actual exit code from the file written by install.cmd.
+    $installExitCodeFile = Join-Path $WorkspacePath 'install.exitcode'
+    if (Test-Path $installExitCodeFile) {
+        $installExitCode = [int]((Get-Content $installExitCodeFile -Raw).Trim())
+    } else {
+        Write-TimeoutResult 'Timed out during Step 1: Install (no install.exitcode produced)'
+    }
     $installSuccess = $installExitCode -in @(0, 3010, 1641)
     Write-Info "Install exit code: $installExitCode ($(if ($installSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
 
@@ -1540,8 +1548,14 @@ if ($useWsbCli) {
         } else {
             Write-Step "Step 3: Uninstall"
             "$((Get-Date -Format 'HH:mm:ss')) --- Step 3: Uninstall ---" | Add-Content $sandboxLog
-            $uninstallExitCode = Invoke-SandboxExec 'Step 3: Uninstall' 'C:\TestFiles\uninstall.cmd'
-            if ($uninstallExitCode -eq -999) { Write-TimeoutResult 'Timed out during Step 3: Uninstall' }
+            $null = Invoke-SandboxExec 'Step 3: Uninstall' 'C:\TestFiles\uninstall.cmd'
+            # wsb exec always returns 0 — read actual exit code from the file written by uninstall.cmd.
+            $uninstallExitCodeFile = Join-Path $WorkspacePath 'uninstall.exitcode'
+            if (Test-Path $uninstallExitCodeFile) {
+                $uninstallExitCode = [int]((Get-Content $uninstallExitCodeFile -Raw).Trim())
+            } else {
+                Write-TimeoutResult 'Timed out during Step 3: Uninstall (no uninstall.exitcode produced)'
+            }
             $uninstallSuccess = $uninstallExitCode -in @(0, 3010, 1641)
             Write-Info "Uninstall exit code: $uninstallExitCode ($(if ($uninstallSuccess) { 'SUCCESS' } else { 'FAILURE' }))"
 
