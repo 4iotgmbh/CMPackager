@@ -121,6 +121,18 @@ function Write-Info {
     Write-Host "  $(Get-ElapsedPrefix) [INFO] $Message" -ForegroundColor Gray
 }
 
+# Stub for CMPackager's Add-LogContent. Recipe scripts (DownloadVersionCheck,
+# ExtraCopyFunctions) call it for diagnostic logging. We write to the console and
+# append to sandbox.log in the workspace when the workspace directory already exists.
+function Add-LogContent {
+    param([string]$Content)
+    $ts = Get-Date -Format 'HH:mm:ss'
+    Write-Host "  [$ts] [LOG] $Content" -ForegroundColor DarkGray
+    if ($WorkspacePath -and (Test-Path $WorkspacePath -PathType Container)) {
+        Add-Content -Path (Join-Path $WorkspacePath 'sandbox.log') -Value "[$ts] $Content" -ErrorAction SilentlyContinue
+    }
+}
+
 # Extract ProductCode from an MSI file using the Windows Installer COM object (host-side).
 # Called before sandbox launch so Detect.ps1 only needs a registry lookup (no COM in sandbox).
 function Get-MsiProductCodeFromFile {
@@ -393,10 +405,71 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
 
 #endregion
 
-#region ── Build Detection Clause Data ───────────────────────────────────────────
+#region ── Prepare Workspace ─────────────────────────────────────────────────────
 
-# Serialise detection clauses into a PowerShell literal that will be embedded
-# verbatim into the generated RunTest.ps1 inside the sandbox.
+Write-Step "Preparing sandbox workspace: $WorkspacePath"
+
+# Stop any lingering sandbox before touching the workspace — a running sandbox holds
+# an open handle to the mapped folder and will cause Remove-Item to fail.
+if ($useWsbCli) {
+    $staleIds = & $wsbCliPath list 2>&1 | Where-Object { $_ -match '^[0-9a-fA-F]{8}-' }
+    foreach ($staleId in $staleIds) {
+        Write-Info "Stopping stale sandbox $staleId before workspace cleanup..."
+        & $wsbCliPath stop --id $staleId 2>&1 | Out-Null
+    }
+    if ($staleIds) { Start-Sleep -Seconds 3 }
+} else {
+    $staleProcs = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
+    if ($staleProcs) {
+        Write-Info "Stopping stale sandbox processes before workspace cleanup..."
+        $staleProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+    }
+}
+
+# Clean previous run
+if (Test-Path $WorkspacePath) {
+    Remove-Item $WorkspacePath -Recurse -Force
+}
+New-Item -ItemType Directory -Path $WorkspacePath -Force | Out-Null
+
+# Copy installer into workspace
+$sandboxInstallerPath = Join-Path $WorkspacePath $installerFileName
+Copy-Item -Path $resolvedInstallerPath -Destination $sandboxInstallerPath -Force
+Write-Info "Copied installer: $installerFileName"
+
+# Run ExtraCopyFunctions to stage any additional files into the workspace.
+# This mirrors what CMPackager.ps1 does when preparing the SCCM content repository.
+# Variables are mapped to their CMPackager equivalents so recipe scripts work unchanged.
+$extraCopyFunctions = if ($linkedDownload) {
+    $n = $linkedDownload.ExtraCopyFunctions
+    if ($n -is [System.Xml.XmlElement]) { $n.InnerText } else { [string]$n }
+} else { $null }
+
+if (-not [string]::IsNullOrWhiteSpace($extraCopyFunctions)) {
+    Write-Step "Running ExtraCopyFunctions to stage additional files into workspace..."
+    $DownloadFile    = $resolvedInstallerPath                                         # CMPackager: path to downloaded file
+    $TempDir         = if ($downloadDir) { $downloadDir } else { $env:TEMP }         # CMPackager: temp/download directory
+    $DestinationPath = $WorkspacePath                                                  # CMPackager: content distribution path
+    $ScriptRoot      = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))   # CMPackager: repo root (where 7za.exe lives)
+    $Recipe          = $recipe                                                         # CMPackager: full parsed recipe XML
+    $null = $DownloadFile, $TempDir, $DestinationPath, $ScriptRoot, $Recipe           # suppress PSUseDeclaredVarsMoreThanAssignments
+    try {
+        Invoke-Expression $extraCopyFunctions | Out-Null
+        Write-Info "ExtraCopyFunctions complete. Workspace contents:"
+        Get-ChildItem $WorkspacePath -Recurse | ForEach-Object {
+            Write-Info "  $($_.FullName.Substring($WorkspacePath.Length + 1))"
+        }
+    } catch {
+        Write-Warning "ExtraCopyFunctions failed: $_. Extra files may be missing from the workspace."
+    }
+}
+
+#endregion
+
+#region ── Build Detection Clause Data ───────────────────────────────────────────
+# Placed after ExtraCopyFunctions so MSI files staged by it are available for
+# ProductCode extraction (e.g. Citrix where a wrapper EXE extracts RIInstaller.msi).
 
 $detectionClauseLiterals = @()
 
@@ -405,13 +478,29 @@ switch ($detMethodType) {
         # Extract ProductCode on the host so Detect.ps1 only needs a registry lookup.
         # Using the Windows Installer COM object inside the sandbox (SYSTEM context via wsb exec)
         # hangs for ~60 s — the COM server is unavailable to SYSTEM in the sandbox session.
+        #
+        # If the recipe's main installer is a wrapper EXE, ExtraCopyFunctions will have already
+        # staged the real MSI into the workspace. Try the main installer first; if it is not an
+        # MSI (or ProductCode extraction fails), scan the workspace for any staged .msi files.
+        $hostPc = $null
+        $msiFileUsed = $installerFileName
         $hostPc = Get-MsiProductCodeFromFile $resolvedInstallerPath
+        if (-not $hostPc) {
+            # Main file is not an MSI or ProductCode could not be read — look for staged MSIs
+            $stagedMsi = Get-ChildItem -Path $WorkspacePath -Filter '*.msi' -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+            if ($stagedMsi) {
+                Write-Info "Main installer is not an MSI; trying staged MSI: $($stagedMsi.Name)"
+                $hostPc = Get-MsiProductCodeFromFile $stagedMsi.FullName
+                $msiFileUsed = $stagedMsi.Name
+            }
+        }
         if ($hostPc) {
-            Write-Info "MSI ProductCode (from host): $($hostPc.Trim())"
+            Write-Info "MSI ProductCode (from host, file: $msiFileUsed): $($hostPc.Trim())"
             $detectionClauseLiterals += "@{ Type='MSI'; ProductCode='$($hostPc.Trim() -replace "'", "''")' }"
         } else {
             Write-Warning "Could not extract ProductCode from MSI on host — falling back to in-sandbox extraction (may be slow)"
-            $detectionClauseLiterals += "@{ Type='MSI'; InstallerFile='$installerFileName' }"
+            $detectionClauseLiterals += "@{ Type='MSI'; InstallerFile='$msiFileUsed' }"
         }
     }
     'Custom' {
@@ -472,73 +561,11 @@ switch ($detMethodType) {
     }
 }
 
-# Render as a PowerShell array literal for embedding in the generated script
+# Render as a PowerShell array literal for embedding in the generated legacy script
 $detectionArrayLiteral = if ($detectionClauseLiterals.Count -gt 0) {
     "@(`n    " + ($detectionClauseLiterals -join ",`n    ") + "`n)"
 } else {
     '@()'
-}
-
-#endregion
-
-#region ── Prepare Workspace ─────────────────────────────────────────────────────
-
-Write-Step "Preparing sandbox workspace: $WorkspacePath"
-
-# Stop any lingering sandbox before touching the workspace — a running sandbox holds
-# an open handle to the mapped folder and will cause Remove-Item to fail.
-if ($useWsbCli) {
-    $staleIds = & $wsbCliPath list 2>&1 | Where-Object { $_ -match '^[0-9a-fA-F]{8}-' }
-    foreach ($staleId in $staleIds) {
-        Write-Info "Stopping stale sandbox $staleId before workspace cleanup..."
-        & $wsbCliPath stop --id $staleId 2>&1 | Out-Null
-    }
-    if ($staleIds) { Start-Sleep -Seconds 3 }
-} else {
-    $staleProcs = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
-    if ($staleProcs) {
-        Write-Info "Stopping stale sandbox processes before workspace cleanup..."
-        $staleProcs | Stop-Process -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 3
-    }
-}
-
-# Clean previous run
-if (Test-Path $WorkspacePath) {
-    Remove-Item $WorkspacePath -Recurse -Force
-}
-New-Item -ItemType Directory -Path $WorkspacePath -Force | Out-Null
-
-# Copy installer into workspace
-$sandboxInstallerPath = Join-Path $WorkspacePath $installerFileName
-Copy-Item -Path $resolvedInstallerPath -Destination $sandboxInstallerPath -Force
-Write-Info "Copied installer: $installerFileName"
-
-# Run ExtraCopyFunctions to stage any additional files into the workspace.
-# This mirrors what CMPackager.ps1 does when preparing the SCCM content repository.
-# Variables are mapped to their CMPackager equivalents so recipe scripts work unchanged.
-$extraCopyFunctions = if ($linkedDownload) {
-    $n = $linkedDownload.ExtraCopyFunctions
-    if ($n -is [System.Xml.XmlElement]) { $n.InnerText } else { [string]$n }
-} else { $null }
-
-if (-not [string]::IsNullOrWhiteSpace($extraCopyFunctions)) {
-    Write-Step "Running ExtraCopyFunctions to stage additional files into workspace..."
-    $DownloadFile    = $resolvedInstallerPath                                         # CMPackager: path to downloaded file
-    $TempDir         = if ($downloadDir) { $downloadDir } else { $env:TEMP }         # CMPackager: temp/download directory
-    $DestinationPath = $WorkspacePath                                                  # CMPackager: content distribution path
-    $ScriptRoot      = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))   # CMPackager: repo root (where 7za.exe lives)
-    $Recipe          = $recipe                                                         # CMPackager: full parsed recipe XML
-    $null = $DownloadFile, $TempDir, $DestinationPath, $ScriptRoot, $Recipe           # suppress PSUseDeclaredVarsMoreThanAssignments
-    try {
-        Invoke-Expression $extraCopyFunctions | Out-Null
-        Write-Info "ExtraCopyFunctions complete. Workspace contents:"
-        Get-ChildItem $WorkspacePath -Recurse | ForEach-Object {
-            Write-Info "  $($_.FullName.Substring($WorkspacePath.Length + 1))"
-        }
-    } catch {
-        Write-Warning "ExtraCopyFunctions failed: $_. Extra files may be missing from the workspace."
-    }
 }
 
 #endregion
