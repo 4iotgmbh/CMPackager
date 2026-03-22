@@ -450,12 +450,13 @@ $extraCopyFunctions = if ($linkedDownload) {
 
 if (-not [string]::IsNullOrWhiteSpace($extraCopyFunctions)) {
     Write-Step "Running ExtraCopyFunctions to stage additional files into workspace..."
-    $DownloadFile    = $resolvedInstallerPath                                         # CMPackager: path to downloaded file
-    $TempDir         = if ($downloadDir) { $downloadDir } else { $env:TEMP }         # CMPackager: temp/download directory
-    $DestinationPath = $WorkspacePath                                                  # CMPackager: content distribution path
-    $ScriptRoot      = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))   # CMPackager: repo root (where 7za.exe lives)
-    $Recipe          = $recipe                                                         # CMPackager: full parsed recipe XML
-    $null = $DownloadFile, $TempDir, $DestinationPath, $ScriptRoot, $Recipe           # suppress PSUseDeclaredVarsMoreThanAssignments
+    $DownloadFile     = $resolvedInstallerPath                                        # CMPackager: path to downloaded file
+    $DownloadFileName = Split-Path $resolvedInstallerPath -Leaf                      # CMPackager: filename of downloaded file
+    $TempDir          = if ($downloadDir) { $downloadDir } else { $env:TEMP }        # CMPackager: temp/download directory
+    $DestinationPath  = $WorkspacePath                                                # CMPackager: content distribution path
+    $ScriptRoot       = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))  # CMPackager: repo root (where 7za.exe lives)
+    $Recipe           = $recipe                                                       # CMPackager: full parsed recipe XML
+    $null = $DownloadFile, $DownloadFileName, $TempDir, $DestinationPath, $ScriptRoot, $Recipe  # suppress PSUseDeclaredVarsMoreThanAssignments
     try {
         Invoke-Expression $extraCopyFunctions | Out-Null
         Write-Info "ExtraCopyFunctions complete. Workspace contents:"
