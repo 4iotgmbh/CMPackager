@@ -34,7 +34,7 @@
 			<BranchCache>True</BranchCache>
 			<ContentFallback>True</ContentFallback>
 			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallProgram>`"CitrixWorkspaceApp.exe`" /silent /AutoUpdateCheck=manual /AutoUpdateStream=LTSR ADDLOCAL=`"ReceiverInside,ICA_Client,WebHelper,DesktopViewer,USB,Flash,Vd3d,WorkspaceHub`" /ENABLE_SSON=No /ALLOWADDSTORE=N /RCU /noreboot</InstallProgram>
+			<InstallProgram>`"CitrixWorkspaceApp.exe`"  /silent /AutoUpdateCheck=manual /norestart</InstallProgram>
 			<UninstallCmd>`"CitrixWorkspaceApp.exe`" /uninstall /silent</UninstallCmd>
 			<InstallationMSI>RIInstaller.msi</InstallationMSI>
 			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
