@@ -865,7 +865,7 @@ $installCmdBatch
 set EXIT=%ERRORLEVEL%
 if exist install.log copy /Y install.log "C:\TestFiles\install.log" >nul 2>&1
 echo [%TIME%] Install exit code: %EXIT% >>C:\TestFiles\sandbox.log
-echo %EXIT%> "C:\TestFiles\install.exitcode"
+(echo %EXIT%) > "C:\TestFiles\install.exitcode"
 exit /b %EXIT%
 "@ | Set-Content (Join-Path $WorkspacePath 'install.cmd') -Encoding ASCII
     Write-Info "Generated: install.cmd"
@@ -881,7 +881,7 @@ $uninstallCmdBatch
 set EXIT=%ERRORLEVEL%
 if exist uninstall.log copy /Y uninstall.log "C:\TestFiles\uninstall.log" >nul 2>&1
 echo [%TIME%] Uninstall exit code: %EXIT% >>C:\TestFiles\sandbox.log
-echo %EXIT%> "C:\TestFiles\uninstall.exitcode"
+(echo %EXIT%) > "C:\TestFiles\uninstall.exitcode"
 exit /b %EXIT%
 "@ | Set-Content (Join-Path $WorkspacePath 'uninstall.cmd') -Encoding ASCII
         Write-Info "Generated: uninstall.cmd"
