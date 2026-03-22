@@ -385,10 +385,11 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
     # These are set by the recipe script and used later for CustomScript detection substitution.
     if (-not [string]::IsNullOrWhiteSpace($downloadVersionCheck)) {
         Write-Step "Running DownloadVersionCheck to extract version..."
-        $DownloadFile = $resolvedInstallerPath                                       # consumed inside Invoke-Expression
-        $TempDir      = $downloadDir                                               # consumed inside Invoke-Expression
-        $ScriptRoot   = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))   # consumed inside Invoke-Expression
-        $null = $DownloadFile, $TempDir, $ScriptRoot                               # suppress PSUseDeclaredVarsMoreThanAssignments
+        $DownloadFile    = $resolvedInstallerPath                                     # consumed inside Invoke-Expression
+        $DownloadFileName = Split-Path $resolvedInstallerPath -Leaf                # consumed inside Invoke-Expression
+        $TempDir         = $downloadDir                                            # consumed inside Invoke-Expression
+        $ScriptRoot      = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')) # consumed inside Invoke-Expression
+        $null = $DownloadFile, $DownloadFileName, $TempDir, $ScriptRoot           # suppress PSUseDeclaredVarsMoreThanAssignments
         try {
             Invoke-Expression $downloadVersionCheck | Out-Null
             if ($Version) {
