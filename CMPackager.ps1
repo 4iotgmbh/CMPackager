@@ -330,6 +330,33 @@ function Get-InstallerURLfromWinget {
 
   $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+  # Resolve HTTP redirects to return a directly downloadable URL.
+  # Some manifests list wrapper URLs (e.g. SourceForge /download pages) that
+  # respond with a 302 to the real CDN URL.  Invoke-WebRequest cannot always
+  # follow these transparently, so we resolve them here before returning.
+  function Resolve-InstallerUrl ([string]$Url) {
+      if ($Url -notmatch '/download$') { return $Url }
+      try {
+          $req = [System.Net.HttpWebRequest]::Create($Url)
+          $req.Method = 'HEAD'
+          $req.AllowAutoRedirect = $true
+          $req.MaximumAutomaticRedirections = 10
+          $req.UserAgent = $userAgent
+          $req.Timeout = 15000
+          $resp = $req.GetResponse()
+          $final = $resp.ResponseUri.AbsoluteUri
+          $resp.Close()
+          return $final
+      } catch [System.Net.WebException] {
+          if ($_.Exception.Response) {
+              $final = $_.Exception.Response.ResponseUri.AbsoluteUri
+              $_.Exception.Response.Close()
+              if ($final -and $final -ne $Url) { return $final }
+          }
+      } catch {}
+      return $Url
+  }
+
   try {
       $headers = @{
           "User-Agent" = $userAgent
@@ -389,9 +416,9 @@ function Get-InstallerURLfromWinget {
                   if ($InstallerType -eq "zip") {
                       $nestedMatch = [regex]::Match($yamlContent, "(?i)RelativeFilePath:\s*(.+)")
                       $nestedPath = if ($nestedMatch.Success) { $nestedMatch.Groups[1].Value.Trim() } else { $null }
-                      [PSCustomObject]@{ Url = $urlMatch.Groups[1].Value; NestedFilePath = $nestedPath }
+                      [PSCustomObject]@{ Url = (Resolve-InstallerUrl $urlMatch.Groups[1].Value); NestedFilePath = $nestedPath }
                   } else {
-                      $urlMatch.Groups[1].Value
+                      Resolve-InstallerUrl $urlMatch.Groups[1].Value
                   }
               }
               else { Write-Warning "Could not parse $InstallerType URL from installer manifest." }
@@ -425,9 +452,9 @@ function Get-InstallerURLfromWinget {
                   if ($InstallerType -eq "zip") {
                       $nestedMatch = [regex]::Match($targetBlock, "(?i)RelativeFilePath:\s*(.+)")
                       $nestedPath = if ($nestedMatch.Success) { $nestedMatch.Groups[1].Value.Trim() } else { $null }
-                      [PSCustomObject]@{ Url = $urlMatch.Groups[1].Value; NestedFilePath = $nestedPath }
+                      [PSCustomObject]@{ Url = (Resolve-InstallerUrl $urlMatch.Groups[1].Value); NestedFilePath = $nestedPath }
                   } else {
-                      $urlMatch.Groups[1].Value
+                      Resolve-InstallerUrl $urlMatch.Groups[1].Value
                   }
               } else {
                   Write-Warning "Could not parse $InstallerType URL from installer manifest."
