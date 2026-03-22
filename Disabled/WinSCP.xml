@@ -9,7 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$Url = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/w/WinSCP/WinSCP" -InstallerType wix -Architecture x86 -Scope machine</PrefetchScript>
+			<PrefetchScript>$Url = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/w/WinSCP/WinSCP" -Architecture x86 -Scope machine</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>WinSCP.msi</DownloadFileName>
 			<Version></Version>
