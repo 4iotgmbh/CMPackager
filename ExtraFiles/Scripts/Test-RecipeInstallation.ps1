@@ -1494,7 +1494,8 @@ if ($useWsbCli) {
     # wsb exec always returns 0 — read actual exit code from the file written by install.cmd.
     $installExitCodeFile = Join-Path $WorkspacePath 'install.exitcode'
     if (Test-Path $installExitCodeFile) {
-        $installExitCode = [int]((Get-Content $installExitCodeFile -Raw).Trim())
+        $raw = Get-Content $installExitCodeFile -Raw
+        $installExitCode = if ($raw -and $raw.Trim()) { [int]$raw.Trim() } else { 0 }
     } else {
         Write-TimeoutResult 'Timed out during Step 1: Install (no install.exitcode produced)'
     }
@@ -1552,7 +1553,8 @@ if ($useWsbCli) {
             # wsb exec always returns 0 — read actual exit code from the file written by uninstall.cmd.
             $uninstallExitCodeFile = Join-Path $WorkspacePath 'uninstall.exitcode'
             if (Test-Path $uninstallExitCodeFile) {
-                $uninstallExitCode = [int]((Get-Content $uninstallExitCodeFile -Raw).Trim())
+                $raw = Get-Content $uninstallExitCodeFile -Raw
+                $uninstallExitCode = if ($raw -and $raw.Trim()) { [int]$raw.Trim() } else { 0 }
             } else {
                 Write-TimeoutResult 'Timed out during Step 3: Uninstall (no uninstall.exitcode produced)'
             }
