@@ -330,23 +330,22 @@ function Get-InstallerURLfromWinget {
 
   $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-  # Resolve HTTP redirects to return a directly downloadable URL.
-  # Some manifests list wrapper URLs (e.g. SourceForge /download pages) that
-  # respond with a 302 to the real CDN URL.  Invoke-WebRequest cannot always
-  # follow these transparently, so we resolve them here before returning.
+  # Resolve wrapper download URLs to a directly downloadable CDN URL.
+  # Some manifests (e.g. WinSCP via SourceForge) list a /download page rather
+  # than a direct file link.  SourceForge serves an HTML countdown page for GET
+  # requests; the real CDN URL is embedded inside that HTML.  HEAD requests do
+  # not redirect to the file, so we must fetch the page and parse it out.
   function Resolve-InstallerUrl ([string]$Url) {
       if ($Url -notmatch '/download$') { return $Url }
       try {
-          $req = [System.Net.HttpWebRequest]::Create($Url)
-          $req.Method = 'HEAD'
-          $req.AllowAutoRedirect = $true
-          $req.MaximumAutomaticRedirections = 10
-          $req.UserAgent = $userAgent
-          $req.Timeout = 15000
-          $resp = $req.GetResponse()
-          $final = $resp.ResponseUri.AbsoluteUri
-          $resp.Close()
-          return $final
+          $html = (Invoke-WebRequest -Uri $Url -UseBasicParsing -MaximumRedirection 10 `
+                      -TimeoutSec 30 -ErrorAction Stop).Content
+          # SourceForge embeds the CDN URL in a <meta http-equiv="refresh"> tag and
+          # the "Problems Downloading?" button's data-release-url attribute.
+          $m = [regex]::Match($html, 'https://downloads\.sourceforge\.net/project/[^\s"''<>\\]+')
+          if ($m.Success) {
+              return [System.Net.WebUtility]::HtmlDecode($m.Value)
+          }
       } catch [System.Net.WebException] {
           if ($_.Exception.Response) {
               $final = $_.Exception.Response.ResponseUri.AbsoluteUri
