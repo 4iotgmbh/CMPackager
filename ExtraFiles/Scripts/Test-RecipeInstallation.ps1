@@ -450,6 +450,24 @@ $detectionArrayLiteral = if ($detectionClauseLiterals.Count -gt 0) {
 
 Write-Step "Preparing sandbox workspace: $WorkspacePath"
 
+# Stop any lingering sandbox before touching the workspace — a running sandbox holds
+# an open handle to the mapped folder and will cause Remove-Item to fail.
+if ($useWsbCli) {
+    $staleIds = & $wsbCliPath list 2>&1 | Where-Object { $_ -match '^[0-9a-fA-F]{8}-' }
+    foreach ($staleId in $staleIds) {
+        Write-Info "Stopping stale sandbox $staleId before workspace cleanup..."
+        & $wsbCliPath stop --id $staleId 2>&1 | Out-Null
+    }
+    if ($staleIds) { Start-Sleep -Seconds 3 }
+} else {
+    $staleProcs = Get-Process -Name 'WindowsSandbox', 'WindowsSandboxClient' -ErrorAction SilentlyContinue
+    if ($staleProcs) {
+        Write-Info "Stopping stale sandbox processes before workspace cleanup..."
+        $staleProcs | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 3
+    }
+}
+
 # Clean previous run
 if (Test-Path $WorkspacePath) {
     Remove-Item $WorkspacePath -Recurse -Force
