@@ -226,11 +226,6 @@ Write-Info "Application     : $appName"
 Write-Info "Deployment type : $depTypeName ($installType)"
 Write-Info "Detection method: $detMethodType"
 
-# TODO: implement CustomScript (PowerShell script) detection testing.
-if ($detMethodType -eq 'CustomScript') {
-    Write-Warning "CustomScript (PowerShell script) detection is not yet supported by this tester — skipping recipe."
-    exit 2
-}
 
 # Build the install command
 if ([string]::IsNullOrWhiteSpace($installProgram)) {
@@ -266,16 +261,14 @@ $installerFileName = if ($linkedDownload -and -not [string]::IsNullOrWhiteSpace(
     'installer'
 }
 
-# TODO: support ExtraCopyFunctions by staging the extra files into the sandbox workspace.
-#       Until then, recipes that use it cannot be tested reliably and are skipped.
-if ($linkedDownload -and -not [string]::IsNullOrWhiteSpace($linkedDownload.ExtraCopyFunctions)) {
-    Write-Warning "Recipe '$appName' uses ExtraCopyFunctions, which is not yet supported by this tester. Skipping."
-    exit 2
-}
 
 #endregion
 
 #region ── Resolve Installer File ────────────────────────────────────────────────
+
+# These are populated by DownloadVersionCheck when downloading automatically;
+# they remain null when InstallerPath is provided by the caller.
+$Version = $null; $FullVersion = $null
 
 if ($PSBoundParameters.ContainsKey('InstallerPath')) {
     $resolvedInstallerPath = $InstallerPath
@@ -291,6 +284,37 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
         $n = $linkedDownload.PrefetchScript
         if ($n -is [System.Xml.XmlElement]) { $n.InnerText } else { [string]$n }
     } else { $null }
+    $downloadVersionCheck = if ($linkedDownload) {
+        $n = $linkedDownload.DownloadVersionCheck
+        if ($n -is [System.Xml.XmlElement]) { $n.InnerText } else { [string]$n }
+    } else { $null }
+
+    # Load helper functions from CMPackager.ps1.
+    # Get-InstallerURLfromWinget is needed by PrefetchScripts; Get-MSIInfo is needed by
+    # DownloadVersionCheck scripts (e.g. 7-Zip.xml, GoogleChrome.xml).
+    $cmPackagerPath = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..' 'CMPackager.ps1'))
+    if (Test-Path $cmPackagerPath) {
+        try {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile(
+                $cmPackagerPath, [ref]$null, [ref]$null)
+            foreach ($funcName in @('Get-InstallerURLfromWinget', 'Get-MSIInfo')) {
+                $funcDef = $ast.FindAll({
+                    $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                    $args[0].Name -eq $funcName
+                }, $false) | Select-Object -First 1
+                if ($funcDef) {
+                    Invoke-Expression $funcDef.Extent.Text
+                    Write-Info "Loaded $funcName from CMPackager.ps1"
+                } else {
+                    Write-Warning "$funcName not found in CMPackager.ps1"
+                }
+            }
+        } catch {
+            Write-Warning "Could not parse CMPackager.ps1: $_ — PrefetchScript/DownloadVersionCheck may fail"
+        }
+    } else {
+        Write-Warning "CMPackager.ps1 not found at $cmPackagerPath — PrefetchScript/DownloadVersionCheck may fail"
+    }
 
     # Resolve a download URL — either directly from <URL> or by running <PrefetchScript>
     $resolvedUrl = $null
@@ -302,31 +326,7 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
     } elseif (-not [string]::IsNullOrWhiteSpace($prefetchScript)) {
         Write-Step "Resolving installer URL via PrefetchScript..."
 
-        # Load Get-InstallerURLfromWinget from CMPackager.ps1 so PrefetchScripts can call it
-        $cmPackagerPath = Join-Path $PSScriptRoot '..' '..' 'CMPackager.ps1'
-        $cmPackagerPath = [System.IO.Path]::GetFullPath($cmPackagerPath)
-        if (Test-Path $cmPackagerPath) {
-            try {
-                $ast = [System.Management.Automation.Language.Parser]::ParseFile(
-                    $cmPackagerPath, [ref]$null, [ref]$null)
-                $funcDef = $ast.FindAll({
-                    $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-                    $args[0].Name -eq 'Get-InstallerURLfromWinget'
-                }, $false) | Select-Object -First 1
-                if ($funcDef) {
-                    Invoke-Expression $funcDef.Extent.Text
-                    Write-Info "Loaded Get-InstallerURLfromWinget from CMPackager.ps1"
-                } else {
-                    Write-Warning "Get-InstallerURLfromWinget not found in CMPackager.ps1 — PrefetchScript may fail"
-                }
-            } catch {
-                Write-Warning "Could not parse CMPackager.ps1: $_ — PrefetchScript may fail"
-            }
-        } else {
-            Write-Warning "CMPackager.ps1 not found at $cmPackagerPath — PrefetchScript may fail"
-        }
-
-        # Execute PrefetchScript — it is expected to set $URL in the current scope
+        # Execute PrefetchScript — it is expected to set $URL in the current scope.
         # $PSScriptRoot is an automatic variable that is not inherited inside Invoke-Expression.
         # Expose the script directory as $CMPackagerScriptRoot so PrefetchScripts that call helper
         # scripts (e.g. via powershell.exe -File (Join-Path $CMPackagerScriptRoot ...)) can resolve
@@ -368,6 +368,27 @@ if ($PSBoundParameters.ContainsKey('InstallerPath')) {
         Write-Error "Failed to download installer from $resolvedUrl`: $_"
         exit 1
     }
+
+    # Run DownloadVersionCheck to extract $Version and $FullVersion from the downloaded file.
+    # These are set by the recipe script and used later for CustomScript detection substitution.
+    if (-not [string]::IsNullOrWhiteSpace($downloadVersionCheck)) {
+        Write-Step "Running DownloadVersionCheck to extract version..."
+        $DownloadFile = $resolvedInstallerPath   # consumed inside Invoke-Expression
+        $TempDir = $downloadDir                  # consumed inside Invoke-Expression
+        $null = $DownloadFile, $TempDir          # suppress PSUseDeclaredVarsMoreThanAssignments
+        try {
+            Invoke-Expression $downloadVersionCheck | Out-Null
+            if ($Version) {
+                $versionLabel = $Version
+                if ($FullVersion -and $FullVersion -ne $Version) { $versionLabel += " (full: $FullVersion)" }
+                Write-Info "Detected version: $versionLabel"
+            } else {
+                Write-Warning "DownloadVersionCheck ran but did not set `$Version."
+            }
+        } catch {
+            Write-Warning "DownloadVersionCheck failed: $_"
+        }
+    }
 }
 
 #endregion
@@ -393,7 +414,7 @@ switch ($detMethodType) {
             $detectionClauseLiterals += "@{ Type='MSI'; InstallerFile='$installerFileName' }"
         }
     }
-    { $_ -in 'Custom', 'CustomScript' } {
+    'Custom' {
         $clauses = $depType.CustomDetectionMethods.DetectionClause
         if ($null -eq $clauses) {
             Write-Warning "DetectionMethodType is Custom but no DetectionClauses found. Detection step will be skipped."
@@ -431,6 +452,20 @@ switch ($detMethodType) {
                 }
             }
         }
+    }
+    'CustomScript' {
+        # Detection is a PowerShell script embedded in <DetectionMethod>.
+        # Extract it now; the script will be written as CustomDetect.ps1 in the workspace
+        # and wrapped by a generated Detect.ps1 that captures its exit code and emits JSON.
+        $n = $depType.DetectionMethod
+        $customDetectRaw = if ($n -is [System.Xml.XmlElement]) { $n.InnerText } else { [string]$n }
+        # Substitute $Version / $FullVersion exactly as CMPackager.ps1 does at deploy time.
+        $customDetectScript = $customDetectRaw `
+            -replace [regex]::Escape('$Version'),     ($Version     ?? '') `
+            -replace [regex]::Escape('$FullVersion'), ($FullVersion ?? '')
+        $scriptLines = ($customDetectScript -split '\n').Count
+        Write-Info "CustomScript detection: $scriptLines-line script extracted$(if ($Version) { " (version substituted: $Version)" })"
+        # No structured clauses needed — detection is driven entirely by the custom script.
     }
     default {
         Write-Warning "DetectionMethodType '$detMethodType' is not supported. Detection step will be skipped."
@@ -479,6 +514,33 @@ $sandboxInstallerPath = Join-Path $WorkspacePath $installerFileName
 Copy-Item -Path $resolvedInstallerPath -Destination $sandboxInstallerPath -Force
 Write-Info "Copied installer: $installerFileName"
 
+# Run ExtraCopyFunctions to stage any additional files into the workspace.
+# This mirrors what CMPackager.ps1 does when preparing the SCCM content repository.
+# Variables are mapped to their CMPackager equivalents so recipe scripts work unchanged.
+$extraCopyFunctions = if ($linkedDownload) {
+    $n = $linkedDownload.ExtraCopyFunctions
+    if ($n -is [System.Xml.XmlElement]) { $n.InnerText } else { [string]$n }
+} else { $null }
+
+if (-not [string]::IsNullOrWhiteSpace($extraCopyFunctions)) {
+    Write-Step "Running ExtraCopyFunctions to stage additional files into workspace..."
+    $DownloadFile    = $resolvedInstallerPath                                         # CMPackager: path to downloaded file
+    $TempDir         = if ($downloadDir) { $downloadDir } else { $env:TEMP }         # CMPackager: temp/download directory
+    $DestinationPath = $WorkspacePath                                                  # CMPackager: content distribution path
+    $ScriptRoot      = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))   # CMPackager: repo root (where 7za.exe lives)
+    $Recipe          = $recipe                                                         # CMPackager: full parsed recipe XML
+    $null = $DownloadFile, $TempDir, $DestinationPath, $ScriptRoot, $Recipe           # suppress PSUseDeclaredVarsMoreThanAssignments
+    try {
+        Invoke-Expression $extraCopyFunctions | Out-Null
+        Write-Info "ExtraCopyFunctions complete. Workspace contents:"
+        Get-ChildItem $WorkspacePath -Recurse | ForEach-Object {
+            Write-Info "  $($_.FullName.Substring($WorkspacePath.Length + 1))"
+        }
+    } catch {
+        Write-Warning "ExtraCopyFunctions failed: $_. Extra files may be missing from the workspace."
+    }
+}
+
 #endregion
 
 #region ── Generate Test Artifacts ──────────────────────────────────────────────
@@ -505,22 +567,68 @@ if ($useWsbCli) {
     # that cause msiexec to stall for minutes. Disabling VerifiedAndReputablePolicyState
     # and refreshing the CI policy via CiTool resolves this.
     # See https://github.com/microsoft/Windows-Sandbox/issues/68#issuecomment-2684473932
+    # xcopy /E copies all workspace files (installer, Detect.ps1, detection_clauses.json,
+    # CustomDetect.ps1 if present, and any files staged by ExtraCopyFunctions) so no
+    # individual copy lines are needed and extra files are handled automatically.
     @'
 @echo off
 REG add HKLM\SYSTEM\CurrentControlSet\Control\CI\Policy /v VerifiedAndReputablePolicyState /t REG_DWORD /d 0 /f
 CiTool -r <NUL
 mkdir C:\Temp\CMPackagerTest 2>nul
-copy /Y "C:\TestFiles\Detect.ps1"              "C:\Temp\CMPackagerTest\Detect.ps1"              >nul 2>&1
-copy /Y "C:\TestFiles\detection_clauses.json"  "C:\Temp\CMPackagerTest\detection_clauses.json"  >nul 2>&1
+xcopy /E /Y /I "C:\TestFiles" "C:\Temp\CMPackagerTest" >nul 2>&1
 '@ | Set-Content (Join-Path $WorkspacePath 'sandbox_setup.cmd') -Encoding ASCII
     Write-Info "Generated: sandbox_setup.cmd"
 
-    # Detect.ps1 — static (non-expandable), reads JSON clauses, exits 0/1
-    # Output design:
+    # Detect.ps1 / CustomDetect.ps1 generation:
+    # For clause-based detection (MSI / Custom): a single Detect.ps1 reads detection_clauses.json
+    #   and emits a JSON result to stdout.
+    # For CustomScript detection: CustomDetect.ps1 contains the recipe's detection script (with
+    #   $Version already substituted); Detect.ps1 is a thin wrapper that runs it as a subprocess,
+    #   captures its exit code, and emits the same JSON result format to stdout.
+    # In both cases, detect_after_*.cmd runs Detect.ps1 unchanged — no branching needed there.
     #   stdout  → JSON result object (captured by detect_after_*.cmd via > redirect)
     #   stderr  → diagnostic log lines (captured by detect_after_*.cmd via 2> redirect)
     # PowerShell Set-Content/Add-Content cannot write from SYSTEM context (wsb exec), so
     # all output goes via the subprocess streams that cmd.exe can redirect to C:\TestFiles\.
+    if ($detMethodType -eq 'CustomScript') {
+        # Write the user's detection script with $Version already substituted.
+        # UTF-8 encoding so multi-byte characters in the recipe script are preserved.
+        $customDetectScript | Set-Content (Join-Path $WorkspacePath 'CustomDetect.ps1') -Encoding UTF8
+        Write-Info "Generated: CustomDetect.ps1"
+        # Write a thin Detect.ps1 wrapper — ASCII only (PS 5.1 encoding rule).
+        @'
+# Detect.ps1 - CustomScript detection wrapper
+# Generated by Test-RecipeInstallation.ps1
+# Runs CustomDetect.ps1 as a subprocess and emits a JSON result to stdout.
+# stdout: JSON result   stderr: diagnostic log
+# NOTE: ASCII only - encoding-safe for PowerShell 5.1 in sandbox
+$ErrorActionPreference = 'Continue'
+
+function Write-Log {
+    param([string]$Message)
+    $ts = Get-Date -Format 'HH:mm:ss'
+    [Console]::Error.WriteLine("$ts $Message")
+}
+
+$customScript = 'C:\Temp\CMPackagerTest\CustomDetect.ps1'
+if (-not (Test-Path $customScript)) {
+    Write-Log "ERROR: CustomDetect.ps1 not found at $customScript"
+    [PSCustomObject]@{ Detected = $false; Output = ''; ExitCode = -1 } | ConvertTo-Json -Compress
+    exit 1
+}
+
+Write-Log "Running custom detection script: $customScript"
+$output = (& powershell.exe -NonInteractive -ExecutionPolicy Bypass -File $customScript 2>&1) | Out-String
+$exitCode = $LASTEXITCODE
+Write-Log "Custom detection exit code: $exitCode"
+Write-Log "Custom detection output: $($output.Trim())"
+
+$detected = ($exitCode -eq 0)
+[PSCustomObject]@{ Detected = $detected; Output = $output.Trim(); ExitCode = $exitCode } | ConvertTo-Json -Compress
+if ($detected) { exit 0 } else { exit 1 }
+'@ | Set-Content (Join-Path $WorkspacePath 'Detect.ps1') -Encoding ASCII
+        Write-Info "Generated: Detect.ps1 (CustomScript wrapper)"
+    } else {
     @'
 # Detect.ps1 - generated by Test-RecipeInstallation.ps1
 # Exits: 0 = application detected, 1 = not detected
@@ -682,7 +790,8 @@ Write-Log "Detection overall: $($result.Detected)"
 $result | ConvertTo-Json -Depth 10
 if ($result.Detected) { exit 0 } else { exit 1 }
 '@ | Set-Content (Join-Path $WorkspacePath 'Detect.ps1') -Encoding ASCII
-    Write-Info "Generated: Detect.ps1"
+        Write-Info "Generated: Detect.ps1 (clause-based)"
+    } # end if CustomScript / else
 
     # WaitMsiEvent.ps1 — static, polls Application event log for MsiInstaller events
     if ($installType -eq 'MSI') {
