@@ -468,6 +468,21 @@ if (-not [string]::IsNullOrWhiteSpace($extraCopyFunctions)) {
     }
 }
 
+# For MSI deployment types: if ExtraCopyFunctions staged the InstallationMSI into a
+# subfolder (e.g. Ransack\AgentRansack_x64.msi) rather than the workspace root, promote
+# it to the root so msiexec /i "AgentRansack_x64.msi" finds it in the sandbox.
+if ($installType -eq 'MSI' -and -not [string]::IsNullOrWhiteSpace($installationMSI)) {
+    $msiAtRoot = Join-Path $WorkspacePath $installationMSI
+    if (-not (Test-Path $msiAtRoot)) {
+        $foundMsi = Get-ChildItem -Path $WorkspacePath -Filter $installationMSI -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($foundMsi) {
+            Copy-Item $foundMsi.FullName -Destination $msiAtRoot -Force
+            Write-Info "InstallationMSI '$installationMSI' was in subfolder '$($foundMsi.Directory.Name)'; copied to workspace root."
+        }
+    }
+}
+
 #endregion
 
 #region ── Build Detection Clause Data ───────────────────────────────────────────
@@ -487,10 +502,12 @@ switch ($detMethodType) {
         # MSI (or ProductCode extraction fails), scan the workspace for any staged .msi files.
         $hostPc = $null
         $msiFileUsed = $installerFileName
-        $hostPc = Get-MsiProductCodeFromFile $resolvedInstallerPath
+        if ([System.IO.Path]::GetExtension($resolvedInstallerPath) -eq '.msi') {
+            $hostPc = Get-MsiProductCodeFromFile $resolvedInstallerPath
+        }
         if (-not $hostPc) {
             # Main file is not an MSI or ProductCode could not be read — look for staged MSIs
-            $stagedMsi = Get-ChildItem -Path $WorkspacePath -Filter '*.msi' -ErrorAction SilentlyContinue |
+            $stagedMsi = Get-ChildItem -Path $WorkspacePath -Filter '*.msi' -Recurse -ErrorAction SilentlyContinue |
                 Select-Object -First 1
             if ($stagedMsi) {
                 Write-Info "Main installer is not an MSI; trying staged MSI: $($stagedMsi.Name)"
