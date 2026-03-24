@@ -42,7 +42,7 @@
 				<DetectionClause>
 					<DetectionClauseType>File</DetectionClauseType>
 					<Name>WinMergeU.exe</Name>
-					<Path>C:\Windows\system32\config\systemprofile\AppData\Local\Programs\WinMerge\</Path>
+					<Path>%ProgramFiles%\WinMerge\</Path>
 					<PropertyType>Version</PropertyType>
 					<ExpectedValue>$FullVersion</ExpectedValue>
 					<ExpressionOperator>GreaterEquals</ExpressionOperator>
