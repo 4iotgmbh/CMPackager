@@ -147,6 +147,8 @@
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
+		<AvailableOffset>0.00:00:00</AvailableOffset>
+		<DeadlineOffset>0.00:00:00</DeadlineOffset>
 		<DeploymentCollection>Google Chrome-Test</DeploymentCollection>
 	</Deployment>
 	<Deployment>

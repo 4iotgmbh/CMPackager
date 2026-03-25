@@ -66,6 +66,8 @@ Remove-Item "$DestinationPath\AgentRansack_x64.zip" -Force</ExtraCopyFunctions>
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
+		<AvailableOffset>0.00:00:00</AvailableOffset>
+		<DeadlineOffset>0.00:00:00</DeadlineOffset>
 		<DeploymentCollection>AgentRansack-Test</DeploymentCollection>
 	</Deployment>
 	<Deployment>

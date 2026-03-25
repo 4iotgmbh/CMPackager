@@ -113,6 +113,8 @@ Copy-item $ScriptRoot\ExtraFiles\R\*.* $DestinationPath\ -force -recurse
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
+		<AvailableOffset>0.00:00:00</AvailableOffset>
+		<DeadlineOffset>0.00:00:00</DeadlineOffset>
 		<DeploymentCollection>R-Test</DeploymentCollection>
 	</Deployment>
 	<Deployment>

@@ -59,6 +59,8 @@ foreach ($object in $dotNet) {
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
+		<AvailableOffset>0.00:00:00</AvailableOffset>
+		<DeadlineOffset>0.00:00:00</DeadlineOffset>
 		<DeploymentCollection>Microsoft .Net 4.6-Test</DeploymentCollection>
 	</Deployment>
 	<Deployment>

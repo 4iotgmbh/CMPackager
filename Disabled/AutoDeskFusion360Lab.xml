@@ -51,6 +51,8 @@ if (($InstalledVersion -ge "$Version") -and (get-item "C:\Program Files\Autodesk
 	<Deployment>
 		<DeploySoftware>True</DeploySoftware>
 		<Purpose>Required</Purpose>
+		<AvailableOffset>0.00:00:00</AvailableOffset>
+		<DeadlineOffset>0.00:00:00</DeadlineOffset>
 		<DeploymentCollection>Fusion 360-Test</DeploymentCollection>
 	</Deployment>
 	<Deployment>
