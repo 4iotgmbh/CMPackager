@@ -65,7 +65,6 @@
 	</DeploymentTypes>
 	<Distribution>
 		<DistributeContent>True</DistributeContent>
-		<DistributeToGroup></DistributeToGroup>
 	</Distribution>
 	<Supersedence>
 		<Supersedence>True</Supersedence>
