@@ -121,13 +121,6 @@ process {
 
 		# GitHub API token — raises quota from 60 to 5,000 req/hr
 		$Global:GitHubToken = $PackagerPrefs.PackagerPrefs.GitHubToken
-		if ($Global:GitHubToken) {
-			Add-LogContent -Content "GitHub API: authenticated via prefs token (5,000 req/hr)"
-		} elseif ($env:GITHUB_TOKEN) {
-			Add-LogContent -Content "GitHub API: authenticated via GITHUB_TOKEN env var (5,000 req/hr)"
-		} else {
-			Add-LogContent -Content "GitHub API: unauthenticated (60 req/hr cap)"
-		}
 	}
 
 	$Global:ConfigMgrConnection = $false
@@ -2303,6 +2296,13 @@ function Get-InstallerURLfromWinget {
 
 	## Get the Recipes
 	$RecipeList = Get-ChildItem $RecipePath | Select-Object -Property Name -ExpandProperty Name | Where-Object -Property Name -NE "Template.xml" | Sort-Object -Property Name
+	if ($Global:GitHubToken) {
+		Add-LogContent -Content "GitHub API: authenticated via prefs token (5,000 req/hr)"
+	} elseif ($env:GITHUB_TOKEN) {
+		Add-LogContent -Content "GitHub API: authenticated via GITHUB_TOKEN env var (5,000 req/hr)"
+	} else {
+		Add-LogContent -Content "GitHub API: unauthenticated (60 req/hr cap)"
+	}
 	Add-LogContent -Content "All Recipes: $RecipeList"
 	if (-not ([System.String]::IsNullOrEmpty($PSBoundParameters.SingleRecipe))) {
 		$RecipeList = $RecipeList | Where-Object { $_ -in $PSBoundParameters.SingleRecipe }
