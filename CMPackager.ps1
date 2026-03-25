@@ -689,13 +689,10 @@ function Get-InstallerURLfromWinget {
 			If ((-not ([String]::IsNullOrEmpty($URL))) -and ($newapp)) {
 				Add-LogContent "Downloading $ApplicationName from $URL"
 				$ProgressPreference = 'SilentlyContinue'
-                IF ($HTTPheaders) {
-				    $request = Invoke-WebRequest -Uri "$URL" -OutFile $DownloadFile -Headers $HTTPheaders
-                }
-                else {
-				    $request = Invoke-WebRequest -Uri "$URL" -OutFile $DownloadFile
-                }
-				$request | Out-Null
+				$iwrParams = @{ Uri = "$URL"; OutFile = $DownloadFile }
+				if ($HTTPheaders) { $iwrParams['Headers'] = $HTTPheaders }
+				if ($PSVersionTable.PSVersion.Major -ge 7) { $iwrParams['AllowInsecureRedirect'] = $true }
+				Invoke-WebRequest @iwrParams | Out-Null
 				Add-LogContent "Completed Downloading $ApplicationName"
 
 				## Run the Version Check Script and record the Version and FullVersion
