@@ -3,21 +3,21 @@
     Scaffolds new CMPackager recipe XML files from WinGet package information.
 
 .DESCRIPTION
-    This script accepts pipeline input from GetWingetInfo.ps1 and creates new recipe XML files
+    This script accepts pipeline input from Get-WingetInfo.ps1 and creates new recipe XML files
     by copying the appropriate template (_MSIRecipeTemplate.xml or _EXERecipeTemplate.xml) and
     populating it with information from the WinGet package manifest.
 
 .PARAMETER InputObject
-    Pipeline input from GetWingetInfo.ps1 containing package information.
+    Pipeline input from Get-WingetInfo.ps1 containing package information.
 
 .PARAMETER OutputPath
     Directory where the new recipe files should be created. Defaults to the Recipes folder.
 
 .EXAMPLE
-    .\GetWingetInfo.ps1 -ApplicationName "7-Zip" | .\ScaffoldRecipe.ps1
+    .\Get-WingetInfo.ps1 -ApplicationName "7-Zip" | .\New-ScaffoldRecipe.ps1
 
 .EXAMPLE
-    .\GetWingetInfo.ps1 -ApplicationName "Adobe Reader", "VLC" | .\ScaffoldRecipe.ps1 -OutputPath "C:\Temp\Recipes"
+    .\Get-WingetInfo.ps1 -ApplicationName "Adobe Reader", "VLC" | .\New-ScaffoldRecipe.ps1 -OutputPath "C:\Temp\Recipes"
 
 .NOTES
     Requires: PowerShell 5.1+

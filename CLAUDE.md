@@ -59,23 +59,23 @@ Active recipes go in `Recipes/`. Disabled/template recipes are in `Disabled/` (~
 
 CMPackager includes tools to leverage the Windows Package Manager (WinGet) repository for recipe creation:
 
-**GetWingetInfo.ps1 Script** (`ExtraFiles/Scripts/GetWingetInfo.ps1`):
+**Get-WingetInfo.ps1 Script** (`ExtraFiles/Scripts/Get-WingetInfo.ps1`):
 
 - PowerShell 7 utility for researching applications when creating new recipes
 - Searches the WinGet repository and provides interactive selection via `Out-ConsoleGridView`
 - Retrieves comprehensive package details from WinGet manifests (YAML files on GitHub)
 - Returns: installer URLs, version info, publisher, description, silent install switches, product codes, architecture, etc.
 - Requires modules: `Microsoft.WinGet.Client`, `Microsoft.PowerShell.ConsoleGuiTools`, `powershell-yaml`, `cobalt`
-- Usage: `.\GetWingetInfo.ps1 -ApplicationName "Adobe Reader", "7-Zip" -Output List`
+- Usage: `.\Get-WingetInfo.ps1 -ApplicationName "Adobe Reader", "7-Zip" -Output List`
 
-**ScaffoldRecipe.ps1 Script** (`ExtraFiles/Scripts/ScaffoldRecipe.ps1`):
+**New-ScaffoldRecipe.ps1 Script** (`ExtraFiles/Scripts/New-ScaffoldRecipe.ps1`):
 
-- Accepts pipeline input from GetWingetInfo.ps1 to automatically scaffold new recipe files
+- Accepts pipeline input from Get-WingetInfo.ps1 to automatically scaffold new recipe files
 - Selects the appropriate template (`_MSIRecipeTemplate.xml` or `_EXERecipeTemplate.xml`) based on installer type
 - Creates recipe file named after the application (spaces removed)
 - Populates XML fields: Name, Description, Publisher, UserDocumentation, PrefetchScript, install commands, etc.
 - Outputs to `Recipes/` folder by default (customizable via `-OutputPath` parameter)
-- Usage: `.\GetWingetInfo.ps1 -ApplicationName "7-Zip" | .\ScaffoldRecipe.ps1`
+- Usage: `.\Get-WingetInfo.ps1 -ApplicationName "7-Zip" | .\New-ScaffoldRecipe.ps1`
 - Note: Generated recipes require customization (detection methods, icons, testing) before deployment
 
 **Dynamic URL Functions in CMPackager.ps1**:
@@ -95,10 +95,10 @@ $DownloadURL = Get-InstallerURLfromWinget -apiUrl $apiUrl -InstallerType msi -Ar
 ```powershell
 # Step 1: Research the application and gather WinGet information
 cd ExtraFiles\Scripts
-.\GetWingetInfo.ps1 -ApplicationName "7-Zip"
+.\Get-WingetInfo.ps1 -ApplicationName "7-Zip"
 
-# Step 2: Pipe the output to ScaffoldRecipe.ps1 to create a new recipe
-.\GetWingetInfo.ps1 -ApplicationName "7-Zip" | .\ScaffoldRecipe.ps1
+# Step 2: Pipe the output to New-ScaffoldRecipe.ps1 to create a new recipe
+.\Get-WingetInfo.ps1 -ApplicationName "7-Zip" | .\New-ScaffoldRecipe.ps1
 
 # Step 3: Customize the generated recipe (add icon, configure detection method, test)
 
@@ -267,5 +267,5 @@ Result values: `PASS`, `PASS (install only — no uninstall configured)`, `FAIL`
 | `Recipes/` | Active recipe XMLs (gitignored except Template.xml) |
 | `Disabled/` | Example/template recipes and XSD schema |
 | `ExtraFiles/icons/` | Application icons for SCCM |
-| `ExtraFiles/Scripts/` | Helper scripts: `GetWingetInfo.ps1` (recipe research), `ScaffoldRecipe.ps1` (recipe scaffolding), driver recipe generators, setup GUI XAML |
+| `ExtraFiles/Scripts/` | Helper scripts: `Get-WingetInfo.ps1` (recipe research), `New-ScaffoldRecipe.ps1` (recipe scaffolding), driver recipe generators, setup GUI XAML |
 | `7za.exe` | Bundled 7-Zip for extraction tasks |
