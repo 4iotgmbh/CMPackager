@@ -109,8 +109,22 @@ Write-Host "  Recipes folder : $RecipesPath" -ForegroundColor Gray
 Write-Host "  Recipes found  : $total" -ForegroundColor Gray
 Write-Host "  Timeout/test   : $TimeoutMinutes min" -ForegroundColor Gray
 Write-Host "  Results CSV    : $csvPath" -ForegroundColor Gray
+$authMode = if ($env:GITHUB_TOKEN) { 'authenticated (GITHUB_TOKEN set)' } else { 'unauthenticated (60 req/hr)' }
+Write-Host "  GitHub API      : $authMode" -ForegroundColor Gray
 Write-Host '══════════════════════════════════════════════════════════' -ForegroundColor White
 Write-Host ''
+
+# ── GitHub auth / rate-limit helpers ──────────────────────────────────────────
+
+function Get-GitHubAuthHeaders {
+    # Canonical copy -- keep in sync with CMPackager.ps1 and sibling scripts.
+    # Precedence: CMPackager.prefs <GitHubToken> > $env:GITHUB_TOKEN > anonymous.
+    param([string]$PrefsToken = '')
+    $token = if ($PrefsToken) { $PrefsToken } elseif ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { $null }
+    $h = @{ 'User-Agent' = 'CMPackager' }
+    if ($token) { $h['Authorization'] = "Bearer $token" }
+    return $h
+}
 
 # ── GitHub rate-limit helper ───────────────────────────────────────────────────
 # Many recipes call Get-InstallerURLfromWinget which queries the GitHub REST API.
@@ -119,7 +133,7 @@ Write-Host ''
 # sleep until the reset timestamp reported by the API.
 function Wait-GitHubRateLimit {
     try {
-        $rl   = Invoke-RestMethod -Uri 'https://api.github.com/rate_limit' -ErrorAction Stop
+        $rl   = Invoke-RestMethod -Uri 'https://api.github.com/rate_limit' -Headers (Get-GitHubAuthHeaders) -ErrorAction Stop
         $core = $rl.rate   # top-level 'rate' mirrors resources.core
         if ($core.remaining -le 5) {
             $resetAt = [DateTimeOffset]::FromUnixTimeSeconds($core.reset)

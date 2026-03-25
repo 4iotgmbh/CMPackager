@@ -33,4 +33,8 @@
 	<PreferredDistributionLoc></PreferredDistributionLoc>
 	<!-- PreferredDeployCollection - [String] Collection to deploy Application to if "DeploySoftware" is Set to True, but no "DeploymentCollection" is set -->
 	<PreferredDeployCollection></PreferredDeployCollection>
+	<!-- GitHubToken - [String] Optional GitHub personal access token (classic or fine-grained).
+	     Raises the GitHub API quota from 60 to 5,000 requests/hour. Leave empty to fall back
+	     to the GITHUB_TOKEN environment variable, or anonymous access if neither is set. -->
+	<GitHubToken></GitHubToken>
 </PackagerPrefs>

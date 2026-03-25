@@ -26,10 +26,9 @@ param (
     [string]$Token
 )
 
+$resolvedToken = if ($Token) { $Token } elseif ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { $null }
 $headers = @{ 'User-Agent' = 'CMPackager-RateLimitCheck' }
-if ($Token) {
-    $headers['Authorization'] = "Bearer $Token"
-}
+if ($resolvedToken) { $headers['Authorization'] = "Bearer $resolvedToken" }
 
 try {
     $rl = Invoke-RestMethod -Uri 'https://api.github.com/rate_limit' -Headers $headers -ErrorAction Stop
@@ -76,6 +75,8 @@ foreach ($name in $resources.Keys) {
 
 Write-Host '══════════════════════════════════════════════' -ForegroundColor White
 
-$authMode = if ($Token) { 'authenticated' } else { 'unauthenticated (60 req/hr cap)' }
+$authMode = if ($resolvedToken) {
+    if ($Token) { 'authenticated (explicit -Token)' } else { 'authenticated (GITHUB_TOKEN env var)' }
+} else { 'unauthenticated (60 req/hr cap)' }
 Write-Host "  Mode: $authMode" -ForegroundColor DarkGray
 Write-Host ''

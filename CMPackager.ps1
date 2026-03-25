@@ -118,6 +118,16 @@ process {
 		#This gets switched to True if Applications are Packaged
 		$Global:SendEmail = $false
 		$Global:TemplateApplicationCreatedFlag = $false
+
+		# GitHub API token — raises quota from 60 to 5,000 req/hr
+		$Global:GitHubToken = $PackagerPrefs.PackagerPrefs.GitHubToken
+		if ($Global:GitHubToken) {
+			Add-LogContent -Content "GitHub API: authenticated via prefs token (5,000 req/hr)"
+		} elseif ($env:GITHUB_TOKEN) {
+			Add-LogContent -Content "GitHub API: authenticated via GITHUB_TOKEN env var (5,000 req/hr)"
+		} else {
+			Add-LogContent -Content "GitHub API: unauthenticated (60 req/hr cap)"
+		}
 	}
 
 	$Global:ConfigMgrConnection = $false
@@ -300,6 +310,16 @@ Combines the output from Get-ChildItem with the Get-ExtensionAttribute function,
 		}
 	}
 
+function Get-GitHubAuthHeaders {
+    # Canonical copy -- keep in sync with sibling scripts in ExtraFiles\Scripts\.
+    # Precedence: CMPackager.prefs <GitHubToken> > $env:GITHUB_TOKEN > anonymous.
+    param([string]$PrefsToken = '')
+    $token = if ($PrefsToken) { $PrefsToken } elseif ($env:GITHUB_TOKEN) { $env:GITHUB_TOKEN } else { $null }
+    $h = @{ 'User-Agent' = 'CMPackager' }
+    if ($token) { $h['Authorization'] = "Bearer $token" }
+    return $h
+}
+
 function Get-InstallerURLfromWinget {
   param (
     [parameter(Mandatory = $true)]
@@ -328,8 +348,6 @@ function Get-InstallerURLfromWinget {
 
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-  $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
   # Resolve wrapper download URLs to a directly downloadable CDN URL.
   # Some manifests (e.g. WinSCP via SourceForge) list a /download page rather
   # than a direct file link.  SourceForge serves an HTML countdown page for GET
@@ -357,10 +375,8 @@ function Get-InstallerURLfromWinget {
   }
 
   try {
-      $headers = @{
-          "User-Agent" = $userAgent
-          "Accept"     = "application/vnd.github.v3+json"
-      }
+      $headers = Get-GitHubAuthHeaders -PrefsToken $Global:GitHubToken
+      $headers['Accept'] = 'application/vnd.github.v3+json'
 
       # Step 1: List version folders to find the latest
       $versions = Invoke-RestMethod -Uri $apiUrl -Headers $headers -ErrorAction Stop
