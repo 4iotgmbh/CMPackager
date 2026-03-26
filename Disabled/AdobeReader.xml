@@ -47,9 +47,9 @@
 					<Path>%ProgramFiles(x86)%\Adobe\Acrobat Reader DC\Reader</Path>
 					<PropertyType>Version</PropertyType>
 					<ExpectedValue>$Version</ExpectedValue>
-					<ExpressionOperator>IsEquals</ExpressionOperator>
+					<ExpressionOperator>GreaterEquals</ExpressionOperator>
 					<Value>True</Value>
-					<Is64Bit>True</Is64Bit>
+					<Is64Bit>False</Is64Bit>
 				</DetectionClause>
 			</CustomDetectionMethods>
 			<InstallBehavior>
