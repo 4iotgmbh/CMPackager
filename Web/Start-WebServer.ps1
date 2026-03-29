@@ -194,8 +194,9 @@ $handlerScript = {
         $mode   = $body.mode
         $recipe = if ($body.recipe) { Get-SafeFilename $body.recipe } else { '' }
 
-        $scriptPath = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
-        $prefsArg   = " -PreferenceFile `"$($shared.PrefsFile)`""
+        $scriptPath  = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
+        $recipesPath = Join-Path $shared.ProjectRoot 'Recipes'
+        $prefsArg    = " -PreferenceFile `"$($shared.PrefsFile)`" -RecipePath `"$recipesPath`""
         $psArgs = if ($mode -eq 'single' -and $recipe) {
             "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg -SingleRecipe `"$recipe`""
         } else {
@@ -465,7 +466,7 @@ $handlerScript = {
                     if ($app) {
                         $deps = @(Get-CMApplicationDeployment -ApplicationName $app.LocalizedDisplayName -ErrorAction SilentlyContinue |
                                   Select-Object CollectionName, AssignmentType, DesiredConfigType,
-                                                NumberTotal, NumberSuccess, NumberErrors, NumberInProgress)
+                                                NumberTargeted, NumberSuccess, NumberErrors, NumberInProgress)
                     }
 
                     [PSCustomObject]@{

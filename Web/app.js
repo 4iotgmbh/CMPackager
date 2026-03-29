@@ -552,14 +552,15 @@
         app.deployments.forEach(dep => {
           const tr = document.createElement('tr');
           const purpose = dep.AssignmentType === 1 ? 'Required' : dep.DesiredConfigType === 1 ? 'Required' : 'Available';
-          const statsparts = [];
-          if (dep.NumberTotal != null)    statsparts.push(`Total: ${dep.NumberTotal}`);
-          if (dep.NumberSuccess != null)  statsparts.push(`OK: ${dep.NumberSuccess}`);
-          if (dep.NumberErrors != null)   statsparts.push(`Err: ${dep.NumberErrors}`);
+          const fmt = v => (v != null) ? String(v) : '?';
+          const targeted = dep.NumberTargeted ?? dep.NumberTotal;
+          const statsStr = (targeted == null && dep.NumberSuccess == null && dep.NumberErrors == null)
+            ? '—'
+            : `T:${fmt(targeted)} OK:${fmt(dep.NumberSuccess)} Err:${fmt(dep.NumberErrors)}`;
           tr.innerHTML = `
             <td class="col-coll">${esc(dep.CollectionName || '—')}</td>
             <td class="col-type">${esc(purpose)}</td>
-            <td class="col-num">${esc(statsparts.join(' | ') || '—')}</td>`;
+            <td class="col-num">${esc(statsStr)}</td>`;
           dt.appendChild(tr);
         });
         depWrap.appendChild(dt);
