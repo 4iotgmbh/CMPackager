@@ -15,6 +15,8 @@
     sortDir:      'desc',
     sccmLoaded:   false,
     sccm:         { available: false, apps: [] },
+    testsFilter:  '',
+    sccmFilter:   '',
   };
 
   // ── DOM shortcuts ────────────────────────────────────────────────────────
@@ -295,7 +297,7 @@
     if (!line.trim()) return;
     const container = $('log-lines');
     const div = document.createElement('div');
-    div.className = 'log-line';
+    div.className = 'log-line ' + lineClass(line);
     div.textContent = line;
     container.appendChild(div);
     state.logLineCount++;
@@ -399,15 +401,23 @@
       return;
     }
 
-    meta.textContent = `${state.tests.file} — ${state.tests.rows.length} row(s)`;
-
     // Sort
-    const rows = [...state.tests.rows].sort((a, b) => {
+    const sorted = [...state.tests.rows].sort((a, b) => {
       const av = a[state.sortCol] ?? '';
       const bv = b[state.sortCol] ?? '';
       const cmp = String(av).localeCompare(String(bv), undefined, { numeric: true });
       return state.sortDir === 'asc' ? cmp : -cmp;
     });
+
+    // Filter
+    const q = state.testsFilter.trim().toLowerCase();
+    const rows = q
+      ? sorted.filter(r => TEST_COLS.some(c => String(r[c.key] ?? '').toLowerCase().includes(q)))
+      : sorted;
+
+    meta.textContent = q
+      ? `${state.tests.file} — ${rows.length} of ${state.tests.rows.length} row(s)`
+      : `${state.tests.file} — ${state.tests.rows.length} row(s)`;
 
     // Build table
     const wrap = document.createElement('div');
@@ -497,18 +507,28 @@
       return;
     }
 
-    meta.textContent = `${apps.length} recipe(s) checked`;
+    // Filter
+    const q = state.sccmFilter.trim().toLowerCase();
+    const filteredApps = q
+      ? apps.filter(a => [a.recipe, a.appName, a.sccmName].some(f => String(f ?? '').toLowerCase().includes(q)))
+      : apps;
+
+    meta.textContent = q
+      ? `${filteredApps.length} of ${apps.length} recipe(s)`
+      : `${apps.length} recipe(s) checked`;
     body.innerHTML = '';
 
-    if (!apps.length) {
-      body.innerHTML = '<div class="empty-state"><p>No enabled recipes found.</p></div>';
+    if (!filteredApps.length) {
+      body.innerHTML = q
+        ? `<div class="empty-state"><p>No results for &ldquo;${esc(q)}&rdquo;.</p></div>`
+        : '<div class="empty-state"><p>No enabled recipes found.</p></div>';
       return;
     }
 
     const grid = document.createElement('div');
     grid.className = 'sccm-grid';
 
-    apps.forEach(app => {
+    filteredApps.forEach(app => {
       const card = document.createElement('div');
       card.className = 'sccm-app';
 
@@ -581,6 +601,8 @@
     connectSSE();
     pollStatus();
     setInterval(pollStatus, 3000);
+    $('tests-filter').addEventListener('input', e => { state.testsFilter = e.target.value; renderTests(); });
+    $('sccm-filter').addEventListener('input',  e => { state.sccmFilter  = e.target.value; renderSccm(); });
   }
 
   document.addEventListener('DOMContentLoaded', init);
