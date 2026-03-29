@@ -307,7 +307,10 @@ $handlerScript = {
         $writer.AutoFlush = $true
         $writer.NewLine   = "`n"
 
-        $lastLogOffset = 0
+        $initLogPath   = $shared.LogPath
+        $lastLogOffset = if ($initLogPath -and (Test-Path $initLogPath -ErrorAction SilentlyContinue)) {
+            try { [System.IO.FileInfo]::new($initLogPath).Length } catch { 0 }
+        } else { 0 }
         $heartbeatTick = 0
 
         try {
