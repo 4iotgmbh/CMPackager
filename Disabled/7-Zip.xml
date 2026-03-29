@@ -18,16 +18,6 @@
 			$Version = ($version.Split('.'))[0..1] -join "."</DownloadVersionCheck>
 			<ExtraCopyFunctions></ExtraCopyFunctions>
 		</Download>
-		<Download DeploymentType="DeploymentType2">
-			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/7/7zip/7zip" -InstallerType msi -Architecture x86</PrefetchScript>
-			<URL></URL>
-			<DownloadFileName>7Zipx86.msi</DownloadFileName>
-			<Version></Version>
-			<FullVersion></FullVersion>
-			<DownloadVersionCheck>[String]$Version = ([String](Get-MSIInfo -Path $DownloadFile -Property ProductVersion)).TrimStart().TrimEnd()
-			$Version = ($version.Split('.'))[0..1] -join "."</DownloadVersionCheck>
-			<ExtraCopyFunctions></ExtraCopyFunctions>
-		</Download>
 	</Downloads>
 	<DeploymentTypes>
 		<DeploymentType Name="DeploymentType1">
@@ -59,27 +49,6 @@
 					<RequirementsRuleGlobalCondition>AutoPackage - OSArchitecture x64</RequirementsRuleGlobalCondition>
 				</RequirementsRule>
 			</RequirementsRules>
-		</DeploymentType>
-		<DeploymentType Name="DeploymentType2">
-			<DeploymentTypeName>7Zip Silent Install x86</DeploymentTypeName>
-			<InstallationType>MSI</InstallationType>
-			<Comments>Silent Installer for 7Zip</Comments>
-			<Language>English</Language>
-			<CacheContent>False</CacheContent>
-			<BranchCache>True</BranchCache>
-			<ContentFallback>True</ContentFallback>
-			<OnSlowNetwork>Download</OnSlowNetwork>
-			<InstallationMSI>7Zipx86.msi</InstallationMSI>
-			<UninstallCmd></UninstallCmd>
-			<Force32bit>False</Force32bit>
-			<InstallationBehaviorType>InstallForSystem</InstallationBehaviorType>
-			<LogonReqType>WhetherOrNotUserLoggedOn</LogonReqType>
-			<UserInteractionMode>Hidden</UserInteractionMode>
-			<ReqUserInteraction>False</ReqUserInteraction>
-			<EstRuntimeMins>5</EstRuntimeMins>
-			<MaxRuntimeMins>15</MaxRuntimeMins>
-			<RebootBehavior>BasedOnExitCode</RebootBehavior>
-			<DetectionMethodType>MSI</DetectionMethodType>
 		</DeploymentType>
 	</DeploymentTypes>
 	<Distribution>
