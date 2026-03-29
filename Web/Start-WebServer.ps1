@@ -465,7 +465,7 @@ $handlerScript = {
                     $deps = @()
                     if ($app) {
                         $deps = @(Get-CMDeployment -SoftwareName $app.LocalizedDisplayName -ErrorAction SilentlyContinue |
-                                  Select-Object CollectionName, AssignmentAction,
+                                  Select-Object CollectionName, DeploymentIntent,
                                                 NumberTargeted, NumberSuccess, NumberErrors, NumberInProgress, NumberOther, NumberUnknown)
                     }
 

@@ -551,7 +551,7 @@
 
         app.deployments.forEach(dep => {
           const tr = document.createElement('tr');
-          const purpose = dep.AssignmentAction === 1 ? 'Required' : dep.AssignmentAction === 2 ? 'Available' : '—';
+          const purpose = dep.DeploymentIntent === 1 ? 'Required' : dep.DeploymentIntent === 2 ? 'Available' : '—';
           const fmt = v => (v != null) ? String(v) : '?';
           const statsStr = (dep.NumberTargeted == null && dep.NumberSuccess == null && dep.NumberErrors == null)
             ? '—'
