@@ -198,9 +198,9 @@ $handlerScript = {
         $recipesPath = Join-Path $shared.ProjectRoot 'Recipes'
         $prefsArg    = " -PreferenceFile `"$($shared.PrefsFile)`" -RecipePath `"$recipesPath`""
         $psArgs = if ($mode -eq 'single' -and $recipe) {
-            "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg -SingleRecipe `"$recipe`""
+            "-ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg -SingleRecipe `"$recipe`""
         } else {
-            "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg"
+            "-ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg"
         }
 
         Write-Dbg "Run: powershell.exe $psArgs"
