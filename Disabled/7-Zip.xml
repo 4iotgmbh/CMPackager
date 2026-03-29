@@ -9,7 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = "https://www.7-zip.org/$((Invoke-WebRequest https://www.7-zip.org/download.html |Select -ExpandProperty Links |where -Property href -like "*-x64.msi")[0].href)"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/7/7zip/7zip" -InstallerType msi -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>7Zipx64.msi</DownloadFileName>
 			<Version></Version>
@@ -19,7 +19,7 @@
 			<ExtraCopyFunctions></ExtraCopyFunctions>
 		</Download>
 		<Download DeploymentType="DeploymentType2">
-			<PrefetchScript>$URL = "https://www.7-zip.org/$((Invoke-WebRequest https://www.7-zip.org/download.html |Select -ExpandProperty Links |where -Property href -like "*.msi")[0].href)"</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/7/7zip/7zip" -InstallerType msi -Architecture x86</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>7Zipx86.msi</DownloadFileName>
 			<Version></Version>

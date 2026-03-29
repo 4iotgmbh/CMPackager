@@ -663,6 +663,7 @@ function Get-InstallerURLfromWinget {
 			## the software version before the download occurs
 			$PrefetchScript = $Download.PrefetchScript
 			If (-not ([String]::IsNullOrEmpty($PrefetchScript))) {
+				$ProgressPreference = 'SilentlyContinue'
 				Invoke-Expression $PrefetchScript | Out-Null
 			}
 
