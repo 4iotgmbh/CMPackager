@@ -9,7 +9,7 @@
 	</Application>
 	<Downloads>
 		<Download DeploymentType="DeploymentType1">
-			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/7/7zip/7zip" -InstallerType msi -Architecture x64</PrefetchScript>
+			<PrefetchScript>$URL = Get-InstallerURLfromWinget -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/7/7zip/7zip" -InstallerType wix -Architecture x64</PrefetchScript>
 			<URL></URL>
 			<DownloadFileName>7Zipx64.msi</DownloadFileName>
 			<Version></Version>
