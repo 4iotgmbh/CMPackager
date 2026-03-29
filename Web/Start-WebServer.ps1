@@ -4,8 +4,12 @@
 .EXAMPLE
     powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1
     powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1 -Port 9090
+    powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1 -DebugMode
 #>
-param([int]$Port = 8080)
+param(
+    [int]$Port = 8080,
+    [switch]$DebugMode
+)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -13,16 +17,20 @@ $prefsFile   = Join-Path $projectRoot 'CMPackager.prefs'
 
 # ─── Shared state (all keys pre-created before runspace pool opens) ──────────
 $shared = [hashtable]::Synchronized(@{
-    CMProcess    = $null
-    Running      = $false
-    OutputBuffer = [System.Collections.Generic.List[string]]::new()
-    OutputLock   = [object]::new()
-    LogPath      = $null
-    CMSite       = $null
-    PrefsExists  = $false
-    ProjectRoot  = $projectRoot
-    WebRoot      = $PSScriptRoot
-    StartTime    = $null
+    CMProcess      = $null
+    Running        = $false
+    OutputBuffer   = [System.Collections.Generic.List[string]]::new()
+    OutputLock     = [object]::new()
+    LogPath        = $null
+    CMSite         = $null
+    CMPSModulePath = $null
+    PrefsExists    = $false
+    ProjectRoot    = $projectRoot
+    WebRoot        = $PSScriptRoot
+    StartTime      = $null
+    DebugMode      = $DebugMode.IsPresent
+    ReaderRS       = $null   # Keep reader runspaces alive (GC prevention)
+    ReaderPS       = $null
 })
 
 # ─── Load prefs ──────────────────────────────────────────────────────────────
@@ -30,9 +38,10 @@ function Initialize-SharedState {
     if (Test-Path $prefsFile) {
         try {
             [xml]$prefs = Get-Content $prefsFile -Raw
-            $shared.LogPath    = $prefs.PackagerPrefs.LogPath
-            $shared.CMSite     = $prefs.PackagerPrefs.CMSite -replace ':$', ''
-            $shared.PrefsExists = $true
+            $shared.LogPath        = $prefs.PackagerPrefs.LogPath
+            $shared.CMSite         = $prefs.PackagerPrefs.CMSite -replace ':$', ''
+            $shared.CMPSModulePath = $prefs.PackagerPrefs.CMPSModulePath
+            $shared.PrefsExists    = $true
         } catch {
             Write-Warning "Could not parse CMPackager.prefs: $_"
         }
@@ -41,9 +50,22 @@ function Initialize-SharedState {
 
 Initialize-SharedState
 
+if ($DebugMode) {
+    Write-Host "[DEBUG] DebugMode on  |  ProjectRoot: $projectRoot" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] PrefsExists: $($shared.PrefsExists)  |  LogPath: $($shared.LogPath)" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] CMSite: $($shared.CMSite)  |  CMPSModulePath: $($shared.CMPSModulePath)" -ForegroundColor DarkCyan
+}
+
 # ─── Handler scriptblock (runs inside each runspace) ─────────────────────────
 $handlerScript = {
     param($ctx, $shared)
+
+    # ── Debug logger — Write-Host writes to the shared PSHost from pool runspaces ──
+    function Write-Dbg($msg) {
+        if ($shared.DebugMode) {
+            Write-Host "[DEBUG $(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor DarkCyan
+        }
+    }
 
     # ── Helpers ──────────────────────────────────────────────────────────────
     function Send-Json($ctx, $obj, [int]$status = 200) {
@@ -71,7 +93,6 @@ $handlerScript = {
     }
 
     function Get-SafeFilename($name) {
-        # strip all path separators — prevent traversal
         return [System.IO.Path]::GetFileName($name)
     }
 
@@ -81,7 +102,7 @@ $handlerScript = {
             $app = $x.ApplicationDef.Application
             [PSCustomObject]@{
                 file      = $file.Name
-                appName   = if ($app.Name) { $app.Name } else { $file.BaseName }
+                appName   = if ($app.Name)      { $app.Name }      else { $file.BaseName }
                 publisher = if ($app.Publisher) { $app.Publisher } else { '' }
                 state     = $state
             }
@@ -92,6 +113,12 @@ $handlerScript = {
 
     # ── Handlers ─────────────────────────────────────────────────────────────
     function Handle-Status($ctx) {
+        # Sync running state with actual process state
+        if ($shared.Running -and $shared.CMProcess -and $shared.CMProcess.HasExited) {
+            $shared.Running   = $false
+            $shared.CMProcess = $null
+        }
+
         $lines = $null
         [System.Threading.Monitor]::Enter($shared.OutputLock)
         try   { $lines = @($shared.OutputBuffer.ToArray()) }
@@ -110,12 +137,20 @@ $handlerScript = {
 
     function Handle-Recipes($ctx) {
         $root = $shared.ProjectRoot
-        $enabled  = @(Get-ChildItem "$root\Recipes\*.xml" -ErrorAction SilentlyContinue |
-                       Where-Object { $_.Name -notlike '_*' -and $_.Name -ne 'Template.xml' } |
-                       ForEach-Object { Parse-RecipeMeta $_ 'enabled' })
+
+        $enabled = @(Get-ChildItem "$root\Recipes\*.xml" -ErrorAction SilentlyContinue |
+                     Where-Object { $_.Name -notlike '_*' -and $_.Name -ne 'Template.xml' } |
+                     ForEach-Object { Parse-RecipeMeta $_ 'enabled' })
+
+        # Build a set of enabled filenames so we can exclude them from disabled
+        $enabledNames = @{}
+        $enabled | ForEach-Object { $enabledNames[$_.file] = $true }
+
         $disabled = @(Get-ChildItem "$root\Disabled\*.xml" -ErrorAction SilentlyContinue |
-                       Where-Object { $_.Name -notlike '_*' } |
-                       ForEach-Object { Parse-RecipeMeta $_ 'disabled' })
+                      Where-Object { $_.Name -notlike '_*' -and -not $enabledNames.ContainsKey($_.Name) } |
+                      ForEach-Object { Parse-RecipeMeta $_ 'disabled' })
+
+        Write-Dbg "Recipes: $($enabled.Count) enabled, $($disabled.Count) disabled"
         Send-Json $ctx @{ enabled = $enabled; disabled = $disabled }
     }
 
@@ -124,8 +159,9 @@ $handlerScript = {
         $file = Get-SafeFilename $body.file
         $src  = Join-Path $shared.ProjectRoot "Disabled\$file"
         $dst  = Join-Path $shared.ProjectRoot "Recipes\$file"
+        Write-Dbg "Enable: $src -> $dst"
         if (-not (Test-Path $src)) { Send-Json $ctx @{ error = 'File not found in Disabled/' } 404; return }
-        if (Test-Path $dst)        { Send-Json $ctx @{ error = 'File already exists in Recipes/' } 409; return }
+        if (Test-Path $dst)        { Send-Json $ctx @{ error = 'Already exists in Recipes/' } 409; return }
         Move-Item $src $dst -Force
         Send-Json $ctx @{ ok = $true }
     }
@@ -135,8 +171,9 @@ $handlerScript = {
         $file = Get-SafeFilename $body.file
         $src  = Join-Path $shared.ProjectRoot "Recipes\$file"
         $dst  = Join-Path $shared.ProjectRoot "Disabled\$file"
+        Write-Dbg "Disable: $src -> $dst"
         if (-not (Test-Path $src)) { Send-Json $ctx @{ error = 'File not found in Recipes/' } 404; return }
-        if (Test-Path $dst)        { Send-Json $ctx @{ error = 'File already exists in Disabled/' } 409; return }
+        if (Test-Path $dst)        { Send-Json $ctx @{ error = 'Already exists in Disabled/' } 409; return }
         Move-Item $src $dst -Force
         Send-Json $ctx @{ ok = $true }
     }
@@ -150,13 +187,15 @@ $handlerScript = {
         $recipe = if ($body.recipe) { Get-SafeFilename $body.recipe } else { '' }
 
         $scriptPath = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
-        $args = if ($mode -eq 'single' -and $recipe) {
+        $psArgs = if ($mode -eq 'single' -and $recipe) {
             "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`" -SingleRecipe `"$recipe`""
         } else {
             "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`""
         }
 
-        $psi = [System.Diagnostics.ProcessStartInfo]::new('powershell.exe', $args)
+        Write-Dbg "Run: powershell.exe $psArgs"
+
+        $psi = [System.Diagnostics.ProcessStartInfo]::new('powershell.exe', $psArgs)
         $psi.WorkingDirectory       = $shared.ProjectRoot
         $psi.UseShellExecute        = $false
         $psi.RedirectStandardOutput = $true
@@ -164,56 +203,62 @@ $handlerScript = {
         $psi.CreateNoWindow         = $true
 
         $proc = [System.Diagnostics.Process]::new()
-        $proc.StartInfo             = $psi
-        $proc.EnableRaisingEvents   = $true
+        $proc.StartInfo = $psi
 
-        # Capture shared refs for .NET delegate closures
-        $capturedShared = $shared
-
-        $proc.OutputDataReceived.Add([System.Diagnostics.DataReceivedEventHandler]{
-            param($s, $e)
-            if ($null -ne $e.Data) {
-                $line = "[$(Get-Date -Format 'HH:mm:ss')] $($e.Data)"
-                [System.Threading.Monitor]::Enter($capturedShared.OutputLock)
-                try {
-                    if ($capturedShared.OutputBuffer.Count -gt 5000) {
-                        $capturedShared.OutputBuffer.RemoveRange(0, 500)
-                    }
-                    $capturedShared.OutputBuffer.Add($line)
-                } finally { [System.Threading.Monitor]::Exit($capturedShared.OutputLock) }
-            }
-        })
-
-        $proc.ErrorDataReceived.Add([System.Diagnostics.DataReceivedEventHandler]{
-            param($s, $e)
-            if ($null -ne $e.Data) {
-                $line = "[$(Get-Date -Format 'HH:mm:ss')] [ERR] $($e.Data)"
-                [System.Threading.Monitor]::Enter($capturedShared.OutputLock)
-                try {
-                    if ($capturedShared.OutputBuffer.Count -gt 5000) {
-                        $capturedShared.OutputBuffer.RemoveRange(0, 500)
-                    }
-                    $capturedShared.OutputBuffer.Add($line)
-                } finally { [System.Threading.Monitor]::Exit($capturedShared.OutputLock) }
-            }
-        })
-
-        $proc.Exited.Add([System.EventHandler]{
-            $capturedShared.Running   = $false
-            $capturedShared.CMProcess = $null
-        })
-
+        # Clear output buffer before starting
         [System.Threading.Monitor]::Enter($shared.OutputLock)
         try { $shared.OutputBuffer.Clear() }
         finally { [System.Threading.Monitor]::Exit($shared.OutputLock) }
 
         $proc.Start() | Out-Null
-        $proc.BeginOutputReadLine()
-        $proc.BeginErrorReadLine()
+        Write-Dbg "Process started, PID $($proc.Id)"
 
         $shared.CMProcess = $proc
         $shared.Running   = $true
         $shared.StartTime = [datetime]::Now
+
+        # ── Dedicated reader runspaces — avoids .NET delegate/runspace-context issues ──
+        # Each runspace does a blocking ReadLine() loop and writes to the shared buffer.
+        # References are stored in $shared so they are not garbage-collected while running.
+
+        $readerScript = {
+            param($stream, $shared, $prefix)
+            try {
+                while ($true) {
+                    $line = $stream.ReadLine()
+                    if ($null -eq $line) { break }
+                    $ts = "[$(Get-Date -Format 'HH:mm:ss')]$prefix $line"
+                    [System.Threading.Monitor]::Enter($shared.OutputLock)
+                    try {
+                        if ($shared.OutputBuffer.Count -gt 5000) {
+                            $shared.OutputBuffer.RemoveRange(0, 500)
+                        }
+                        $shared.OutputBuffer.Add($ts)
+                    } finally {
+                        [System.Threading.Monitor]::Exit($shared.OutputLock)
+                    }
+                }
+            } catch {}
+        }
+
+        $rs1 = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+        $rs1.Open()
+        $ps1 = [System.Management.Automation.PowerShell]::Create()
+        $ps1.Runspace = $rs1
+        $ps1.AddScript($readerScript).AddArgument($proc.StandardOutput).AddArgument($shared).AddArgument('') | Out-Null
+        $ps1.BeginInvoke() | Out-Null
+
+        $rs2 = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+        $rs2.Open()
+        $ps2 = [System.Management.Automation.PowerShell]::Create()
+        $ps2.Runspace = $rs2
+        $ps2.AddScript($readerScript).AddArgument($proc.StandardError).AddArgument($shared).AddArgument(' [ERR]') | Out-Null
+        $ps2.BeginInvoke() | Out-Null
+
+        # Keep references alive — without this the GC can collect the PS/RS objects
+        # while the async operation is still running
+        $shared.ReaderRS = @($rs1, $rs2)
+        $shared.ReaderPS = @($ps1, $ps2)
 
         Send-Json $ctx @{ ok = $true; pid = $proc.Id; mode = $mode; recipe = $recipe }
     }
@@ -222,9 +267,18 @@ $handlerScript = {
         $proc = $shared.CMProcess
         if ($proc -and -not $proc.HasExited) {
             try { $proc.Kill() } catch {}
+            Write-Dbg "Killed PID $($proc.Id)"
         }
         $shared.Running   = $false
         $shared.CMProcess = $null
+
+        # Close reader runspaces
+        if ($shared.ReaderRS) {
+            foreach ($rs in $shared.ReaderRS) { try { $rs.Close() } catch {} }
+            $shared.ReaderRS = $null
+            $shared.ReaderPS = $null
+        }
+
         Send-Json $ctx @{ ok = $true }
     }
 
@@ -236,7 +290,6 @@ $handlerScript = {
         $resp.Headers.Add('X-Accel-Buffering', 'no')
         $resp.Headers.Add('Access-Control-Allow-Origin', '*')
 
-        # Parse ?from=N so reconnecting clients skip already-seen lines
         $fromParam = $ctx.Request.QueryString['from']
         $lastIndex = if ($fromParam -match '^\d+$') { [int]$fromParam } else { 0 }
 
@@ -244,12 +297,12 @@ $handlerScript = {
         $writer.AutoFlush = $true
         $writer.NewLine   = "`n"
 
-        $lastLogOffset  = 0
-        $heartbeatTick  = 0
+        $lastLogOffset = 0
+        $heartbeatTick = 0
 
         try {
             while ($true) {
-                # ── Send new process output lines ────────────────────────────
+                # ── New process output lines ──────────────────────────────────
                 $lines = $null
                 [System.Threading.Monitor]::Enter($shared.OutputLock)
                 try   { $lines = @($shared.OutputBuffer.ToArray()) }
@@ -262,7 +315,6 @@ $handlerScript = {
                 }
                 if ($lines.Count -gt $lastIndex) {
                     $lastIndex = $lines.Count
-                    # Send updated index so client can reconnect correctly
                     $writer.WriteLine("event: index")
                     $writer.WriteLine("data: $lastIndex")
                     $writer.WriteLine('')
@@ -279,10 +331,10 @@ $handlerScript = {
                             [System.IO.FileShare]::ReadWrite
                         )
                         $fs.Seek($lastLogOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
-                        $reader = [System.IO.StreamReader]::new($fs, [System.Text.Encoding]::UTF8)
-                        $newContent = $reader.ReadToEnd()
+                        $sr = [System.IO.StreamReader]::new($fs, [System.Text.Encoding]::UTF8)
+                        $newContent = $sr.ReadToEnd()
                         $lastLogOffset = $fs.Position
-                        $reader.Close(); $fs.Close()
+                        $sr.Close(); $fs.Close()
 
                         if ($newContent.Length -gt 0) {
                             foreach ($logLine in ($newContent -split "`r?`n")) {
@@ -310,7 +362,7 @@ $handlerScript = {
         } catch [System.IO.IOException] {
             # Client disconnected — normal
         } catch [System.Exception] {
-            # Other disconnect variants
+            # Other disconnect variants (ObjectDisposedException, etc.)
         } finally {
             try { $writer.Close() } catch {}
             try { $resp.OutputStream.Close() } catch {}
@@ -326,6 +378,7 @@ $handlerScript = {
             return
         }
         $latest = $csvFiles[0]
+        Write-Dbg "Tests: using $($latest.Name)"
         try {
             $rows = @(Import-Csv $latest.FullName)
             Send-Json $ctx @{ rows = $rows; file = $latest.Name; available = $true }
@@ -335,23 +388,46 @@ $handlerScript = {
     }
 
     function Handle-SCCM($ctx) {
-        $cmModule = Get-Module ConfigurationManager -ListAvailable -ErrorAction SilentlyContinue |
-                    Select-Object -First 1
-        if (-not $cmModule) {
-            Send-Json $ctx @{ available = $false; message = 'ConfigurationManager module not found on this machine.' }
-            return
-        }
-
         $siteCode = $shared.CMSite
         if (-not $siteCode) {
             Send-Json $ctx @{ available = $false; message = 'CMSite not configured in CMPackager.prefs.' }
             return
         }
 
+        # Resolve ConfigurationManager module path (prefs → PSModulePath → SMS_ADMIN_UI_PATH env var)
+        $modulePath = $null
+
+        if ($shared.CMPSModulePath) {
+            $candidate = Join-Path $shared.CMPSModulePath 'ConfigurationManager.psd1'
+            if (Test-Path $candidate) { $modulePath = $candidate }
+            Write-Dbg "SCCM: CMPSModulePath candidate: $candidate  found: $([bool]$modulePath)"
+        }
+
+        if (-not $modulePath) {
+            $m = Get-Module ConfigurationManager -ListAvailable -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($m) { $modulePath = $m.Path }
+            Write-Dbg "SCCM: PSModulePath search: $modulePath"
+        }
+
+        if (-not $modulePath -and $env:SMS_ADMIN_UI_PATH) {
+            $smsItem = Get-Item $env:SMS_ADMIN_UI_PATH -ErrorAction SilentlyContinue
+            if ($smsItem) {
+                $candidate = Join-Path $smsItem.Parent.FullName 'ConfigurationManager.psd1'
+                if (Test-Path $candidate) { $modulePath = $candidate }
+            }
+            Write-Dbg "SCCM: SMS_ADMIN_UI_PATH candidate: $candidate  found: $([bool]$modulePath)"
+        }
+
+        if (-not $modulePath) {
+            Send-Json $ctx @{ available = $false; message = 'ConfigurationManager module not found. Install SCCM console or set CMPSModulePath in CMPackager.prefs.' }
+            return
+        }
+
         try {
-            Import-Module ConfigurationManager -ErrorAction Stop
+            Import-Module $modulePath -ErrorAction Stop
             Push-Location
             Set-Location "${siteCode}:" -ErrorAction Stop
+            Write-Dbg "SCCM: connected to ${siteCode}:"
 
             $recipes = @(Get-ChildItem "$($shared.ProjectRoot)\Recipes\*.xml" -ErrorAction SilentlyContinue |
                          Where-Object { $_.Name -notlike '_*' -and $_.Name -ne 'Template.xml' })
@@ -360,20 +436,34 @@ $handlerScript = {
                 try {
                     [xml]$x = Get-Content $r.FullName -Raw
                     $appName = $x.ApplicationDef.Application.Name
-                    $app = Get-CMApplication -Name $appName -Fast -ErrorAction SilentlyContinue
-                    $deps = if ($app) {
-                        @(Get-CMApplicationDeployment -ApplicationName $appName -ErrorAction SilentlyContinue |
-                          Select-Object CollectionName, AssignmentType, DesiredConfigType, NumberTotal, NumberSuccess, NumberErrors, NumberInProgress)
-                    } else { @() }
+                    Write-Dbg "SCCM: querying '$appName*'"
+
+                    # CMPackager names apps "$Name $Version" — use wildcard to find any version
+                    $apps = @(Get-CMApplication -Name "$appName*" -Fast -ErrorAction SilentlyContinue)
+                    # Pick the newest (by DateCreated or SoftwareVersion) — not superseded/expired
+                    $app = $apps | Where-Object { -not $_.IsExpired -and -not $_.IsSuperseded } |
+                                   Sort-Object DateCreated -Descending | Select-Object -First 1
+                    if (-not $app) { $app = $apps | Sort-Object DateCreated -Descending | Select-Object -First 1 }
+
+                    $deps = @()
+                    if ($app) {
+                        $deps = @(Get-CMApplicationDeployment -ApplicationName $app.LocalizedDisplayName -ErrorAction SilentlyContinue |
+                                  Select-Object CollectionName, AssignmentType, DesiredConfigType,
+                                                NumberTotal, NumberSuccess, NumberErrors, NumberInProgress)
+                    }
+
                     [PSCustomObject]@{
-                        recipe      = $r.Name
-                        appName     = $appName
-                        found       = [bool]$app
-                        version     = if ($app) { $app.SoftwareVersion } else { $null }
-                        deployments = $deps
+                        recipe       = $r.Name
+                        appName      = $appName
+                        sccmName     = if ($app) { $app.LocalizedDisplayName } else { $null }
+                        found        = [bool]$app
+                        version      = if ($app) { $app.SoftwareVersion } else { $null }
+                        allVersions  = $apps.Count
+                        deployments  = $deps
                     }
                 } catch {
-                    [PSCustomObject]@{ recipe = $r.Name; appName = ''; found = $false; deployments = @() }
+                    Write-Dbg "SCCM: error for $($r.Name): $_"
+                    [PSCustomObject]@{ recipe = $r.Name; appName = ''; sccmName = $null; found = $false; version = $null; allVersions = 0; deployments = @() }
                 }
             })
 
@@ -381,6 +471,7 @@ $handlerScript = {
             Send-Json $ctx @{ available = $true; apps = $results }
         } catch {
             try { Pop-Location -ErrorAction SilentlyContinue } catch {}
+            Write-Dbg "SCCM: exception: $_"
             Send-Json $ctx @{ available = $false; error = $_.Exception.Message }
         }
     }
@@ -391,7 +482,8 @@ $handlerScript = {
     $path   = $req.Url.AbsolutePath
     $method = $req.HttpMethod
 
-    # CORS preflight
+    Write-Dbg "$method $path"
+
     if ($method -eq 'OPTIONS') {
         $resp.Headers.Add('Access-Control-Allow-Origin', '*')
         $resp.Headers.Add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
@@ -402,17 +494,17 @@ $handlerScript = {
     }
 
     try {
-        if     ($method -eq 'GET'  -and $path -eq '/')             { Send-File $ctx (Join-Path $shared.WebRoot 'index.html') 'text/html; charset=utf-8' }
-        elseif ($method -eq 'GET'  -and $path -eq '/app.js')       { Send-File $ctx (Join-Path $shared.WebRoot 'app.js') 'application/javascript; charset=utf-8' }
-        elseif ($method -eq 'GET'  -and $path -eq '/api/status')   { Handle-Status  $ctx }
-        elseif ($method -eq 'GET'  -and $path -eq '/api/recipes')  { Handle-Recipes $ctx }
-        elseif ($method -eq 'POST' -and $path -eq '/api/enable')   { Handle-Enable  $ctx }
-        elseif ($method -eq 'POST' -and $path -eq '/api/disable')  { Handle-Disable $ctx }
-        elseif ($method -eq 'POST' -and $path -eq '/api/run')      { Handle-Run     $ctx }
-        elseif ($method -eq 'POST' -and $path -eq '/api/stop')     { Handle-Stop    $ctx }
-        elseif ($method -eq 'GET'  -and $path -eq '/api/stream')   { Handle-Stream  $ctx }
-        elseif ($method -eq 'GET'  -and $path -eq '/api/tests')    { Handle-Tests   $ctx }
-        elseif ($method -eq 'GET'  -and $path -eq '/api/sccm')     { Handle-SCCM    $ctx }
+        if     ($method -eq 'GET'  -and $path -eq '/')            { Send-File $ctx (Join-Path $shared.WebRoot 'index.html') 'text/html; charset=utf-8' }
+        elseif ($method -eq 'GET'  -and $path -eq '/app.js')      { Send-File $ctx (Join-Path $shared.WebRoot 'app.js') 'application/javascript; charset=utf-8' }
+        elseif ($method -eq 'GET'  -and $path -eq '/api/status')  { Handle-Status  $ctx }
+        elseif ($method -eq 'GET'  -and $path -eq '/api/recipes') { Handle-Recipes $ctx }
+        elseif ($method -eq 'POST' -and $path -eq '/api/enable')  { Handle-Enable  $ctx }
+        elseif ($method -eq 'POST' -and $path -eq '/api/disable') { Handle-Disable $ctx }
+        elseif ($method -eq 'POST' -and $path -eq '/api/run')     { Handle-Run     $ctx }
+        elseif ($method -eq 'POST' -and $path -eq '/api/stop')    { Handle-Stop    $ctx }
+        elseif ($method -eq 'GET'  -and $path -eq '/api/stream')  { Handle-Stream  $ctx }
+        elseif ($method -eq 'GET'  -and $path -eq '/api/tests')   { Handle-Tests   $ctx }
+        elseif ($method -eq 'GET'  -and $path -eq '/api/sccm')    { Handle-SCCM    $ctx }
         else {
             $resp.StatusCode = 404
             $bytes = [System.Text.Encoding]::UTF8.GetBytes('Not found')
@@ -422,61 +514,83 @@ $handlerScript = {
         }
     } catch {
         try {
-            $errBytes = [System.Text.Encoding]::UTF8.GetBytes((@{ error = $_.Exception.Message } | ConvertTo-Json))
+            $errJson  = @{ error = $_.Exception.Message } | ConvertTo-Json
+            $errBytes = [System.Text.Encoding]::UTF8.GetBytes($errJson)
             $resp.StatusCode      = 500
             $resp.ContentType     = 'application/json'
             $resp.ContentLength64 = $errBytes.Length
             $resp.OutputStream.Write($errBytes, 0, $errBytes.Length)
             $resp.OutputStream.Close()
         } catch {}
+        Write-Dbg "Handler exception [$method $path]: $($_.Exception.Message)"
     }
 }
 
-# ─── Listener + Runspace pool ─────────────────────────────────────────────────
-$listener = [System.Net.HttpListener]::new()
-$listener.Prefixes.Add("http://localhost:$Port/")
+# ─── Listener setup with retry (port may linger after hard kill) ──────────────
+$listener = $null
+$pool      = $null
 
-try {
-    $listener.Start()
-} catch {
-    Write-Host "[ERROR] Could not start listener on port $Port : $_" -ForegroundColor Red
-    Write-Host "Try a different port: .\Start-WebServer.ps1 -Port 9090" -ForegroundColor Yellow
-    exit 1
+$maxRetries = 5
+for ($attempt = 1; $attempt -le $maxRetries; $attempt++) {
+    $listener = [System.Net.HttpListener]::new()
+    $listener.Prefixes.Add("http://localhost:$Port/")
+    try {
+        $listener.Start()
+        break
+    } catch {
+        $listener.Close()
+        if ($attempt -eq $maxRetries) {
+            Write-Host "[ERROR] Cannot bind to port $Port after $maxRetries attempts: $_" -ForegroundColor Red
+            Write-Host "Try: .\Start-WebServer.ps1 -Port 9090" -ForegroundColor Yellow
+            exit 1
+        }
+        Write-Host "  Port $Port busy, retrying in 2s... ($attempt/$maxRetries)" -ForegroundColor Yellow
+        Start-Sleep 2
+        $listener = $null
+    }
 }
 
 $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 8)
 $pool.Open()
-
-# Clean shutdown on Ctrl+C
-Register-EngineEvent PowerShell.Exiting -Action {
-    try { $listener.Stop() } catch {}
-    try { $pool.Close() } catch {}
-} | Out-Null
 
 Write-Host ""
 Write-Host "  CMPackager Web UI" -ForegroundColor Cyan
 Write-Host "  http://localhost:$Port/" -ForegroundColor Green
 Write-Host "  Project root : $projectRoot" -ForegroundColor DarkGray
 Write-Host "  Prefs loaded : $($shared.PrefsExists)" -ForegroundColor DarkGray
+if ($DebugMode) { Write-Host "  Debug mode   : ON" -ForegroundColor DarkCyan }
 Write-Host "  Press Ctrl+C to stop." -ForegroundColor DarkGray
 Write-Host ""
 
-# ─── Main accept loop ─────────────────────────────────────────────────────────
-while ($listener.IsListening) {
-    try {
-        $ctx = $listener.GetContext()
-    } catch [System.Net.HttpListenerException] {
-        break   # listener stopped
-    } catch {
-        continue
+# ─── Main accept loop — try/finally guarantees cleanup on Ctrl+C ─────────────
+try {
+    while ($listener.IsListening) {
+        try {
+            $ctx = $listener.GetContext()
+        } catch [System.Net.HttpListenerException] {
+            break
+        } catch {
+            continue
+        }
+
+        $ps = [System.Management.Automation.PowerShell]::Create()
+        $ps.RunspacePool = $pool
+        $ps.AddScript($handlerScript).AddArgument($ctx).AddArgument($shared) | Out-Null
+        $ps.BeginInvoke() | Out-Null
+    }
+} finally {
+    # Always runs on Ctrl+C, normal exit, or exception
+    try { $listener.Stop()  } catch {}
+    try { $listener.Close() } catch {}
+    try { $pool.Close()     } catch {}
+
+    # Kill any running CMPackager process
+    if ($shared.CMProcess -and -not $shared.CMProcess.HasExited) {
+        try { $shared.CMProcess.Kill() } catch {}
+    }
+    if ($shared.ReaderRS) {
+        foreach ($rs in $shared.ReaderRS) { try { $rs.Close() } catch {} }
     }
 
-    $ps = [System.Management.Automation.PowerShell]::Create()
-    $ps.RunspacePool = $pool
-    $ps.AddScript($handlerScript).AddArgument($ctx).AddArgument($shared) | Out-Null
-    $ps.BeginInvoke() | Out-Null
+    Write-Host "Server stopped." -ForegroundColor DarkGray
 }
-
-$listener.Close()
-$pool.Close()
-Write-Host "Server stopped." -ForegroundColor DarkGray

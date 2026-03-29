@@ -512,10 +512,13 @@
 
       const hdr = document.createElement('div');
       hdr.className = 'sccm-app-header';
+      const sccmDisplayName = app.sccmName || app.appName || app.recipe;
+      const versionStr = app.version ? ` &bull; v${esc(app.version)}` : '';
+      const versionsStr = (app.allVersions > 1) ? ` &bull; ${app.allVersions} versions` : '';
       hdr.innerHTML = `
         <div>
-          <div class="sccm-app-name">${esc(app.appName || app.recipe)}</div>
-          <div class="sccm-app-meta">${esc(app.recipe)}${app.version ? ' &bull; v' + esc(app.version) : ''}</div>
+          <div class="sccm-app-name">${esc(sccmDisplayName)}</div>
+          <div class="sccm-app-meta">${esc(app.recipe)}${versionStr}${versionsStr}</div>
         </div>
         <div class="flex-row">
           ${app.found
