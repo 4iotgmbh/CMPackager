@@ -8,7 +8,8 @@
 #>
 param(
     [int]$Port = 8080,
-    [switch]$DebugMode
+    [switch]$DebugMode,
+    [string]$AuditLogPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,8 @@ $shared = [hashtable]::Synchronized(@{
     CMSite         = $null
     CMPSModulePath = $null
     PrefsExists    = $false
+    PrefsFile      = $prefsFile
+    AuditLogPath   = ''
     ProjectRoot    = $projectRoot
     WebRoot        = $PSScriptRoot
     StartTime      = $null
@@ -41,6 +44,7 @@ function Initialize-SharedState {
             $shared.LogPath        = $prefs.PackagerPrefs.LogPath
             $shared.CMSite         = $prefs.PackagerPrefs.CMSite -replace ':$', ''
             $shared.CMPSModulePath = $prefs.PackagerPrefs.CMPSModulePath
+            $shared.AuditLogPath   = $prefs.PackagerPrefs.AuditLogPath
             $shared.PrefsExists    = $true
         } catch {
             Write-Warning "Could not parse CMPackager.prefs: $_"
@@ -49,11 +53,15 @@ function Initialize-SharedState {
 }
 
 Initialize-SharedState
+# -AuditLogPath CLI parameter overrides prefs value
+if ($AuditLogPath) { $shared.AuditLogPath = $AuditLogPath }
 
 if ($DebugMode) {
     Write-Host "[DEBUG] DebugMode on  |  ProjectRoot: $projectRoot" -ForegroundColor DarkCyan
-    Write-Host "[DEBUG] PrefsExists: $($shared.PrefsExists)  |  LogPath: $($shared.LogPath)" -ForegroundColor DarkCyan
-    Write-Host "[DEBUG] CMSite: $($shared.CMSite)  |  CMPSModulePath: $($shared.CMPSModulePath)" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] PrefsFile: $prefsFile  |  PrefsExists: $($shared.PrefsExists)" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] LogPath: $($shared.LogPath)  |  CMSite: $($shared.CMSite)" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] CMPSModulePath: $($shared.CMPSModulePath)" -ForegroundColor DarkCyan
+    Write-Host "[DEBUG] AuditLogPath: $($shared.AuditLogPath)" -ForegroundColor DarkCyan
 }
 
 # ─── Handler scriptblock (runs inside each runspace) ─────────────────────────
@@ -187,10 +195,11 @@ $handlerScript = {
         $recipe = if ($body.recipe) { Get-SafeFilename $body.recipe } else { '' }
 
         $scriptPath = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
+        $prefsArg   = " -PreferenceFile `"$($shared.PrefsFile)`""
         $psArgs = if ($mode -eq 'single' -and $recipe) {
-            "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`" -SingleRecipe `"$recipe`""
+            "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg -SingleRecipe `"$recipe`""
         } else {
-            "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`""
+            "-NonInteractive -ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg"
         }
 
         Write-Dbg "Run: powershell.exe $psArgs"
@@ -370,9 +379,16 @@ $handlerScript = {
     }
 
     function Handle-Tests($ctx) {
-        $root = $shared.ProjectRoot
-        $csvFiles = @(Get-ChildItem "$root\RecipeTestResults_*.csv" -ErrorAction SilentlyContinue |
-                      Sort-Object LastWriteTime -Descending)
+        $searchPaths = @($shared.ProjectRoot)
+        if ($shared.AuditLogPath -and (Test-Path $shared.AuditLogPath -ErrorAction SilentlyContinue)) {
+            $searchPaths += $shared.AuditLogPath
+        }
+        $csvFiles = @(
+            foreach ($p in $searchPaths) {
+                Get-ChildItem "$p\RecipeTestResults_*.csv" -ErrorAction SilentlyContinue
+            }
+        ) | Sort-Object LastWriteTime -Descending
+        Write-Dbg "Tests: searched $($searchPaths -join ', '), found $($csvFiles.Count) file(s)"
         if (-not $csvFiles) {
             Send-Json $ctx @{ rows = @(); file = $null; available = $false }
             return

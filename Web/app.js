@@ -308,7 +308,9 @@
 
   function toggleLogPane() {
     const show = $('chk-showlog').checked;
-    $('log-section').style.display = show ? '' : 'none';
+    const ls = $('log-section');
+    ls.style.display = show ? '' : 'none';
+    if (show) ls.scrollTop = ls.scrollHeight;
   }
   window.toggleLogPane = toggleLogPane;
 
