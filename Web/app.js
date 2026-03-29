@@ -551,12 +551,11 @@
 
         app.deployments.forEach(dep => {
           const tr = document.createElement('tr');
-          const purpose = dep.AssignmentType === 1 ? 'Required' : dep.DesiredConfigType === 1 ? 'Required' : 'Available';
+          const purpose = dep.AssignmentAction === 1 ? 'Required' : dep.AssignmentAction === 2 ? 'Available' : '—';
           const fmt = v => (v != null) ? String(v) : '?';
-          const targeted = dep.NumberTargeted ?? dep.NumberTotal;
-          const statsStr = (targeted == null && dep.NumberSuccess == null && dep.NumberErrors == null)
+          const statsStr = (dep.NumberTargeted == null && dep.NumberSuccess == null && dep.NumberErrors == null)
             ? '—'
-            : `T:${fmt(targeted)} OK:${fmt(dep.NumberSuccess)} Err:${fmt(dep.NumberErrors)}`;
+            : `T:${fmt(dep.NumberTargeted)} OK:${fmt(dep.NumberSuccess)} Err:${fmt(dep.NumberErrors)}`;
           tr.innerHTML = `
             <td class="col-coll">${esc(dep.CollectionName || '—')}</td>
             <td class="col-type">${esc(purpose)}</td>

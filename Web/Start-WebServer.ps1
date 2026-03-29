@@ -464,9 +464,9 @@ $handlerScript = {
 
                     $deps = @()
                     if ($app) {
-                        $deps = @(Get-CMApplicationDeployment -ApplicationName $app.LocalizedDisplayName -ErrorAction SilentlyContinue |
-                                  Select-Object CollectionName, AssignmentType, DesiredConfigType,
-                                                NumberTargeted, NumberSuccess, NumberErrors, NumberInProgress)
+                        $deps = @(Get-CMDeployment -SoftwareName $app.LocalizedDisplayName -ErrorAction SilentlyContinue |
+                                  Select-Object CollectionName, AssignmentAction,
+                                                NumberTargeted, NumberSuccess, NumberErrors, NumberInProgress, NumberOther, NumberUnknown)
                     }
 
                     [PSCustomObject]@{
