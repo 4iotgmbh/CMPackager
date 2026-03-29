@@ -17,6 +17,7 @@
     sccm:         { available: false, apps: [] },
     testsFilter:  '',
     sccmFilter:   '',
+    recipesFilter: { enabled: '', disabled: '' },
   };
 
   // ── DOM shortcuts ────────────────────────────────────────────────────────
@@ -136,24 +137,32 @@
 
   function renderRecipes() {
     const { enabled, disabled } = state.recipes;
-    $('count-enabled').textContent  = enabled.length;
-    $('count-disabled').textContent = disabled.length;
 
-    renderRecipeList($('list-enabled'),  enabled,  'enabled');
-    renderRecipeList($('list-disabled'), disabled, 'disabled');
+    renderRecipeList($('list-enabled'),  enabled,  'enabled',  state.recipesFilter.enabled);
+    renderRecipeList($('list-disabled'), disabled, 'disabled', state.recipesFilter.disabled);
   }
 
-  function renderRecipeList(container, recipes, side) {
+  function renderRecipeList(container, recipes, side, filter) {
+    const q = (filter || '').trim().toLowerCase();
+    const visible = q
+      ? recipes.filter(r => [r.appName, r.file, r.publisher].some(f => String(f ?? '').toLowerCase().includes(q)))
+      : recipes;
+
+    const countEl = $(side === 'enabled' ? 'count-enabled' : 'count-disabled');
+    countEl.textContent = q ? `${visible.length}/${recipes.length}` : recipes.length;
+
     container.innerHTML = '';
-    if (!recipes.length) {
+    if (!visible.length) {
       const empty = document.createElement('div');
       empty.className = 'recipe-empty';
-      empty.textContent = side === 'enabled' ? 'No enabled recipes.' : 'No disabled recipes.';
+      empty.textContent = q
+        ? `No results for "${filter}".`
+        : (side === 'enabled' ? 'No enabled recipes.' : 'No disabled recipes.');
       container.appendChild(empty);
       return;
     }
 
-    recipes.forEach(r => {
+    visible.forEach(r => {
       const card = document.createElement('div');
       card.className = 'recipe-card';
 
@@ -603,6 +612,8 @@
     setInterval(pollStatus, 3000);
     $('tests-filter').addEventListener('input', e => { state.testsFilter = e.target.value; renderTests(); });
     $('sccm-filter').addEventListener('input',  e => { state.sccmFilter  = e.target.value; renderSccm(); });
+    $('filter-enabled').addEventListener('input',  e => { state.recipesFilter.enabled  = e.target.value; renderRecipes(); });
+    $('filter-disabled').addEventListener('input', e => { state.recipesFilter.disabled = e.target.value; renderRecipes(); });
   }
 
   document.addEventListener('DOMContentLoaded', init);

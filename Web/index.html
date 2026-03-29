@@ -513,7 +513,10 @@ body {
       <div>
         <div class="section-header">
           <span class="section-title">Enabled</span>
-          <span class="section-count" id="count-enabled">0</span>
+          <div class="flex-row">
+            <input class="filter-input" id="filter-enabled" type="text" placeholder="Filter…" style="width:140px">
+            <span class="section-count" id="count-enabled">0</span>
+          </div>
         </div>
         <div class="recipe-list" id="list-enabled">
           <div class="recipe-empty">Loading…</div>
@@ -524,7 +527,10 @@ body {
       <div>
         <div class="section-header">
           <span class="section-title">Disabled</span>
-          <span class="section-count" id="count-disabled">0</span>
+          <div class="flex-row">
+            <input class="filter-input" id="filter-disabled" type="text" placeholder="Filter…" style="width:140px">
+            <span class="section-count" id="count-disabled">0</span>
+          </div>
         </div>
         <div class="recipe-list" id="list-disabled">
           <div class="recipe-empty">Loading…</div>
