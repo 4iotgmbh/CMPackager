@@ -156,16 +156,12 @@ process {
 			[parameter(Mandatory = $true)]
 			$Content
 		)
-		if ($Load) {
-			if ((Get-Item $LogPath -ErrorAction SilentlyContinue).length -gt $MaxLogSize) {
-				Write-Output "$(Get-Date -Format G) - $Content" > $LogPath
-			}
-			else {
-				Write-Output "$(Get-Date -Format G) - $Content" >> $LogPath
-			}
+		$line = "$(Get-Date -Format G) - $Content`r`n"
+		if ($Load -and (Get-Item $LogPath -ErrorAction SilentlyContinue).length -gt $MaxLogSize) {
+			[System.IO.File]::WriteAllText($LogPath, $line, [System.Text.Encoding]::UTF8)
 		}
 		else {
-			Write-Output "$(Get-Date -Format G) - $Content" >> $LogPath
+			[System.IO.File]::AppendAllText($LogPath, $line, [System.Text.Encoding]::UTF8)
 		}
 	}
 

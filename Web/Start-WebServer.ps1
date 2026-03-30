@@ -309,8 +309,8 @@ $handlerScript = {
 
         $initLogPath   = $shared.LogPath
         $lastLogOffset = if ($initLogPath -and (Test-Path $initLogPath -ErrorAction SilentlyContinue)) {
-            try { [Math]::Max(0, [System.IO.FileInfo]::new($initLogPath).Length - 8192) } catch { 0 }
-        } else { 0 }
+            try { [Math]::Max(0L, [System.IO.FileInfo]::new($initLogPath).Length - 8192L) } catch { 0L }
+        } else { 0L }
         $heartbeatTick = 0
 
         try {
@@ -343,24 +343,37 @@ $handlerScript = {
                             [System.IO.FileAccess]::Read,
                             [System.IO.FileShare]::ReadWrite
                         )
-                        # Detect encoding from BOM — PowerShell 5 >> writes UTF-16 LE by default
-                        $bom    = [byte[]]::new(4)
-                        $bomLen = $fs.Read($bom, 0, 4)
-                        if ($bomLen -ge 2 -and $bom[0] -eq 0xFF -and $bom[1] -eq 0xFE) {
-                            $enc = [System.Text.Encoding]::Unicode; $bomSize = 2
-                        } elseif ($bomLen -ge 3 -and $bom[0] -eq 0xEF -and $bom[1] -eq 0xBB -and $bom[2] -eq 0xBF) {
-                            $enc = [System.Text.Encoding]::UTF8; $bomSize = 3
-                        } else {
-                            $enc = [System.Text.Encoding]::UTF8; $bomSize = 0
-                        }
-                        # Align read position to character boundary (UTF-16 needs even offset)
-                        $readFrom = [Math]::Max($lastLogOffset, $bomSize)
-                        if ($bomSize -eq 2 -and ($readFrom % 2) -ne 0) { $readFrom-- }
+                        $fileLen = $fs.Length
+                        # Read the tail chunk as raw bytes so we can detect encoding ourselves
+                        $readFrom = $lastLogOffset
                         $fs.Seek($readFrom, [System.IO.SeekOrigin]::Begin) | Out-Null
-                        $sr = [System.IO.StreamReader]::new($fs, $enc, $false)
-                        $newContent = $sr.ReadToEnd()
+                        $chunkLen = [int]($fileLen - $readFrom)
+                        $rawBytes = [byte[]]::new($chunkLen)
+                        $bytesRead = $fs.Read($rawBytes, 0, $chunkLen)
                         $lastLogOffset = $fs.Position
-                        $sr.Close(); $fs.Close()
+                        $fs.Close()
+
+                        if ($bytesRead -gt 0) {
+                            # Detect UTF-16 LE by counting interior null bytes (every other byte is 0x00 for ASCII chars)
+                            # Sample up to first 256 bytes to decide
+                            $sampleLen  = [Math]::Min($bytesRead, 256)
+                            $nullCount  = 0
+                            for ($bi = 1; $bi -lt $sampleLen; $bi += 2) { if ($rawBytes[$bi] -eq 0) { $nullCount++ } }
+                            $nullRatio  = $nullCount / ([Math]::Ceiling($sampleLen / 2))
+
+                            if ($nullRatio -gt 0.6) {
+                                # UTF-16 LE — align to even byte boundary then decode
+                                $offset = if ($readFrom % 2 -ne 0) { 1 } else { 0 }
+                                $newContent = [System.Text.Encoding]::Unicode.GetString($rawBytes, $offset, $bytesRead - $offset)
+                            } else {
+                                # UTF-8 (or ASCII) — strip any stray null bytes left from a previous UTF-16 section
+                                $cleaned    = [System.Linq.Enumerable]::Where($rawBytes[0..($bytesRead-1)], [Func[byte,bool]]{ param($b) $b -ne 0 })
+                                $cleanBytes = [byte[]]$cleaned
+                                $newContent = [System.Text.Encoding]::UTF8.GetString($cleanBytes)
+                            }
+                        } else {
+                            $newContent = ''
+                        }
 
                         if ($newContent.Length -gt 0) {
                             foreach ($logLine in ($newContent -split "`r?`n")) {
