@@ -309,7 +309,7 @@ $handlerScript = {
 
         $initLogPath   = $shared.LogPath
         $lastLogOffset = if ($initLogPath -and (Test-Path $initLogPath -ErrorAction SilentlyContinue)) {
-            try { [System.IO.FileInfo]::new($initLogPath).Length } catch { 0 }
+            try { [Math]::Max(0, [System.IO.FileInfo]::new($initLogPath).Length - 8192) } catch { 0 }
         } else { 0 }
         $heartbeatTick = 0
 

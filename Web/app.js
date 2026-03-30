@@ -306,14 +306,28 @@
     if (!line.trim()) return;
     const container = $('log-lines');
     const div = document.createElement('div');
-    div.className = 'log-line ' + lineClass(line);
-    div.textContent = line;
+
+    // Log format: "3/29/2026 1:28:24 PM - Message text"
+    const m = line.match(/^(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+(?:AM|PM))\s+-\s+(.*)$/i);
+    if (m) {
+      const ts   = document.createElement('span');
+      ts.className   = 'log-ts';
+      ts.textContent = m[1] + ' — ';
+      const msg  = document.createElement('span');
+      msg.className  = 'log-msg ' + lineClass(m[2]);
+      msg.textContent = m[2];
+      div.className = 'log-line';
+      div.appendChild(ts);
+      div.appendChild(msg);
+    } else {
+      div.className = 'log-line ' + lineClass(line);
+      div.textContent = line;
+    }
+
     container.appendChild(div);
     state.logLineCount++;
-    // Auto-scroll log section
     const ls = $('log-section');
     ls.scrollTop = ls.scrollHeight;
-    // Cap
     while (container.children.length > 500) container.removeChild(container.firstChild);
   }
 
