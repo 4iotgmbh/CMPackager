@@ -218,7 +218,6 @@
   // ── Run controls ──────────────────────────────────────────────────────────
   async function runAll() {
     if (state.running) return;
-    clearOutput();
     switchTab('output');
     const r = await fetchJSON('/api/run', {
       method: 'POST',
@@ -226,6 +225,7 @@
       body: JSON.stringify({ mode: 'all' }),
     });
     if (r?.ok) {
+      clearOutput();
       state.running = true;
       updateRunUI();
       $('output-meta').textContent = 'Running all recipes…';
@@ -234,7 +234,6 @@
 
   async function runSingle(file) {
     if (state.running) return;
-    clearOutput();
     switchTab('output');
     const r = await fetchJSON('/api/run', {
       method: 'POST',
@@ -242,6 +241,7 @@
       body: JSON.stringify({ mode: 'single', recipe: file }),
     });
     if (r?.ok) {
+      clearOutput();
       state.running = true;
       updateRunUI();
       $('output-meta').textContent = `Running: ${file}`;

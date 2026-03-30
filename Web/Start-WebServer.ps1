@@ -343,8 +343,21 @@ $handlerScript = {
                             [System.IO.FileAccess]::Read,
                             [System.IO.FileShare]::ReadWrite
                         )
-                        $fs.Seek($lastLogOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
-                        $sr = [System.IO.StreamReader]::new($fs, [System.Text.Encoding]::UTF8)
+                        # Detect encoding from BOM — PowerShell 5 >> writes UTF-16 LE by default
+                        $bom    = [byte[]]::new(4)
+                        $bomLen = $fs.Read($bom, 0, 4)
+                        if ($bomLen -ge 2 -and $bom[0] -eq 0xFF -and $bom[1] -eq 0xFE) {
+                            $enc = [System.Text.Encoding]::Unicode; $bomSize = 2
+                        } elseif ($bomLen -ge 3 -and $bom[0] -eq 0xEF -and $bom[1] -eq 0xBB -and $bom[2] -eq 0xBF) {
+                            $enc = [System.Text.Encoding]::UTF8; $bomSize = 3
+                        } else {
+                            $enc = [System.Text.Encoding]::UTF8; $bomSize = 0
+                        }
+                        # Align read position to character boundary (UTF-16 needs even offset)
+                        $readFrom = [Math]::Max($lastLogOffset, $bomSize)
+                        if ($bomSize -eq 2 -and ($readFrom % 2) -ne 0) { $readFrom-- }
+                        $fs.Seek($readFrom, [System.IO.SeekOrigin]::Begin) | Out-Null
+                        $sr = [System.IO.StreamReader]::new($fs, $enc, $false)
                         $newContent = $sr.ReadToEnd()
                         $lastLogOffset = $fs.Position
                         $sr.Close(); $fs.Close()
