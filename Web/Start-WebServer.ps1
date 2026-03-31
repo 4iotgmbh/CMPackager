@@ -715,6 +715,7 @@ $triggerXml  </Triggers>
     try {
         if     ($method -eq 'GET'  -and $path -eq '/')            { Send-File $ctx (Join-Path $shared.WebRoot 'index.html') 'text/html; charset=utf-8' }
         elseif ($method -eq 'GET'  -and $path -eq '/app.js')      { Send-File $ctx (Join-Path $shared.WebRoot 'app.js') 'application/javascript; charset=utf-8' }
+        elseif ($method -eq 'GET'  -and $path -eq '/logo.png')    { Send-File $ctx (Join-Path $shared.WebRoot 'logo.png') 'image/png' }
         elseif ($method -eq 'GET'  -and $path -eq '/api/status')  { Handle-Status  $ctx }
         elseif ($method -eq 'GET'  -and $path -eq '/api/recipes') { Handle-Recipes $ctx }
         elseif ($method -eq 'POST' -and $path -eq '/api/enable')  { Handle-Enable  $ctx }
