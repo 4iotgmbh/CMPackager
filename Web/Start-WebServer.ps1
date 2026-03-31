@@ -536,23 +536,36 @@ $handlerScript = {
         $tasks = @(Get-ScheduledTask -TaskName 'CMPackager - *' -ErrorAction SilentlyContinue)
         if (-not $tasks.Count) { Send-Json $ctx $result; return }
 
+        # Use COM API to read trigger XML — more reliable than CIM .Triggers for tasks
+        # registered via Register-ScheduledTask -Xml (which can return empty .Triggers)
+        $svc = New-Object -ComObject 'Schedule.Service'
+        $svc.Connect()
+        $rootFolder = $svc.GetFolder('\')
+
         $recipeFiles = @(Get-ChildItem "$($shared.ProjectRoot)\Recipes\*.xml" -ErrorAction SilentlyContinue |
                          Where-Object { $_.Name -notlike '_*' -and $_.Name -ne 'Template.xml' })
 
         foreach ($task in $tasks) {
-            $trigger = $task.Triggers | Select-Object -First 1
-            if (-not $trigger) { continue }
-
-            $schedType = switch ($trigger.CimClass.CimClassName) {
-                'MSFT_TaskDailyTrigger'   { 'daily'   }
-                'MSFT_TaskWeeklyTrigger'  { 'weekly'  }
-                'MSFT_TaskMonthlyTrigger'    { 'monthly' }
-                'MSFT_TaskMonthlyDOWTrigger' { 'monthly' }
-                default                   { 'unknown' }
-            }
+            $schedType = 'unknown'
             $startTime = $null
-            if ($trigger.StartBoundary) {
-                try { $startTime = [datetime]::Parse($trigger.StartBoundary).ToString('HH:mm') } catch {}
+            try {
+                $comTask  = $rootFolder.GetTask($task.TaskName)
+                $taskXml  = [xml]$comTask.Xml
+                $ns       = 'http://schemas.microsoft.com/windows/2004/02/mit/task'
+                $nsMgr    = [System.Xml.XmlNamespaceManager]::new($taskXml.NameTable)
+                $nsMgr.AddNamespace('t', $ns)
+                $trigger  = $taskXml.SelectSingleNode('//t:Triggers/*[1]', $nsMgr)
+                if ($trigger) {
+                    $schedType = if ($trigger.SelectSingleNode('t:ScheduleByDay', $nsMgr))            { 'daily'   }
+                                 elseif ($trigger.SelectSingleNode('t:ScheduleByWeek', $nsMgr))       { 'weekly'  }
+                                 elseif ($trigger.SelectSingleNode('t:ScheduleByMonth', $nsMgr))      { 'monthly' }
+                                 elseif ($trigger.SelectSingleNode('t:ScheduleByMonthDayOfWeek', $nsMgr)) { 'monthly' }
+                                 else { 'unknown' }
+                    $sb = $trigger.SelectSingleNode('t:StartBoundary', $nsMgr)
+                    if ($sb) { try { $startTime = [datetime]::Parse($sb.InnerText).ToString('HH:mm') } catch {} }
+                }
+            } catch {
+                Write-Dbg "GetSchedules: COM read failed for '$($task.TaskName)': $_"
             }
 
             foreach ($rf in $recipeFiles) {
