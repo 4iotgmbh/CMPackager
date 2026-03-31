@@ -546,7 +546,8 @@ $handlerScript = {
             $schedType = switch ($trigger.CimClass.CimClassName) {
                 'MSFT_TaskDailyTrigger'   { 'daily'   }
                 'MSFT_TaskWeeklyTrigger'  { 'weekly'  }
-                'MSFT_TaskMonthlyTrigger' { 'monthly' }
+                'MSFT_TaskMonthlyTrigger'    { 'monthly' }
+                'MSFT_TaskMonthlyDOWTrigger' { 'monthly' }
                 default                   { 'unknown' }
             }
             $startTime = $null
