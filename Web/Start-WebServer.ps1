@@ -605,12 +605,25 @@ $handlerScript = {
         $timeStr = $startDt.ToString('HH:mm')
 
         $todayDow     = (Get-Date).DayOfWeek.ToString()   # e.g. "Tuesday"
-        $todayDom     = (Get-Date).Day                     # e.g. 15
+        $todayDowBit  = [uint16](1 -shl [int](Get-Date).DayOfWeek)  # bitmask: Sun=1, Mon=2, Tue=4 …
+
+        # Monthly trigger: first occurrence of today's weekday each month.
+        # New-ScheduledTaskTrigger -Monthly is not available in all PS versions —
+        # construct the CIM instance directly instead.
+        $monthlyTrigger = New-CimInstance -Namespace 'Root/Microsoft/Windows/TaskScheduler' `
+            -ClassName 'MSFT_TaskMonthlyDOWTrigger' `
+            -Property @{
+                WeeksOfMonth  = [uint16]1      # first week of the month
+                DaysOfWeek    = $todayDowBit
+                MonthsOfYear  = [uint16]4095   # all 12 months
+                StartBoundary = $startDt.ToString('s')
+                Enabled       = $true
+            } -ClientOnly
 
         $trigger = switch ($type) {
-            'daily'   { New-ScheduledTaskTrigger -Daily   -At $timeStr }
-            'weekly'  { New-ScheduledTaskTrigger -Weekly  -DaysOfWeek $todayDow -At $timeStr }
-            'monthly' { New-ScheduledTaskTrigger -Monthly -DaysOfMonth $todayDom -At $timeStr }
+            'daily'   { New-ScheduledTaskTrigger -Daily  -At $timeStr }
+            'weekly'  { New-ScheduledTaskTrigger -Weekly -DaysOfWeek $todayDow -At $timeStr }
+            'monthly' { $monthlyTrigger }
         }
 
         $scriptPath  = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
