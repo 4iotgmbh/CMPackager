@@ -604,38 +604,78 @@ $handlerScript = {
         }
         $timeStr = $startDt.ToString('HH:mm')
 
-        $todayDow     = (Get-Date).DayOfWeek.ToString()   # e.g. "Tuesday"
-        $todayDowBit  = [uint16](1 -shl [int](Get-Date).DayOfWeek)  # bitmask: Sun=1, Mon=2, Tue=4 …
+        $todayDow = (Get-Date).DayOfWeek.ToString()   # e.g. "Tuesday"
+        $startIso = $startDt.ToString('s')            # e.g. "2026-03-31T05:00:00"
 
-        # Monthly trigger: first occurrence of today's weekday each month.
-        # New-ScheduledTaskTrigger -Monthly is not available in all PS versions —
-        # construct the CIM instance directly instead.
-        $monthlyTrigger = New-CimInstance -Namespace 'Root/Microsoft/Windows/TaskScheduler' `
-            -ClassName 'MSFT_TaskMonthlyDOWTrigger' `
-            -Property @{
-                WeeksOfMonth  = [uint16]1      # first week of the month
-                DaysOfWeek    = $todayDowBit
-                MonthsOfYear  = [uint16]4095   # all 12 months
-                StartBoundary = $startDt.ToString('s')
-                Enabled       = $true
-            } -ClientOnly
-
-        $trigger = switch ($type) {
-            'daily'   { New-ScheduledTaskTrigger -Daily  -At $timeStr }
-            'weekly'  { New-ScheduledTaskTrigger -Weekly -DaysOfWeek $todayDow -At $timeStr }
-            'monthly' { $monthlyTrigger }
+        # Build the trigger XML block — avoids cmdlet PSTypeName incompatibilities
+        $triggerXml = switch ($type) {
+            'daily' { @"
+    <CalendarTrigger>
+      <StartBoundary>$startIso</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
+    </CalendarTrigger>
+"@ }
+            'weekly' { @"
+    <CalendarTrigger>
+      <StartBoundary>$startIso</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByWeek>
+        <WeeksInterval>1</WeeksInterval>
+        <DaysOfWeek><$todayDow /></DaysOfWeek>
+      </ScheduleByWeek>
+    </CalendarTrigger>
+"@ }
+            'monthly' { @"
+    <CalendarTrigger>
+      <StartBoundary>$startIso</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByMonthDayOfWeek>
+        <Weeks><Week>1</Week></Weeks>
+        <DaysOfWeek><$todayDow /></DaysOfWeek>
+        <Months>
+          <January /><February /><March /><April /><May /><June />
+          <July /><August /><September /><October /><November /><December />
+        </Months>
+      </ScheduleByMonthDayOfWeek>
+    </CalendarTrigger>
+"@ }
         }
 
         $scriptPath  = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
         $recipesPath = Join-Path $shared.ProjectRoot 'Recipes'
-        $psArgs      = "-ExecutionPolicy Bypass -NonInteractive -File `"$scriptPath`" -PreferenceFile `"$($shared.PrefsFile)`" -RecipePath `"$recipesPath`" -SingleRecipe `"$file`""
+        # XML-escape the argument string (handles paths with &, <, > etc.)
+        $psArgs = "-ExecutionPolicy Bypass -NonInteractive -File `"$scriptPath`" -PreferenceFile `"$($shared.PrefsFile)`" -RecipePath `"$recipesPath`" -SingleRecipe `"$file`""
+        $psArgsXml = [System.Security.SecurityElement]::Escape($psArgs)
 
-        $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
-        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
-        $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
+        $taskXml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers>
+$triggerXml  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-18</UserId>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT2H</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions>
+    <Exec>
+      <Command>powershell.exe</Command>
+      <Arguments>$psArgsXml</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"@
 
-        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
-            -Principal $principal -Settings $settings -Force -ErrorAction Stop
+        Register-ScheduledTask -TaskName $taskName -Xml $taskXml -Force -ErrorAction Stop
 
         Write-Dbg "SetSchedule: registered '$taskName' type=$type time=$timeStr"
         Send-Json $ctx @{ ok = $true; taskName = $taskName; type = $type; startTime = $timeStr }
