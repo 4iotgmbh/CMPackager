@@ -604,21 +604,25 @@ $handlerScript = {
         }
         $timeStr = $startDt.ToString('HH:mm')
 
+        $todayDow     = (Get-Date).DayOfWeek.ToString()   # e.g. "Tuesday"
+        $todayDom     = (Get-Date).Day                     # e.g. 15
+
         $trigger = switch ($type) {
             'daily'   { New-ScheduledTaskTrigger -Daily   -At $timeStr }
-            'weekly'  { New-ScheduledTaskTrigger -Weekly  -DaysOfWeek Monday -At $timeStr }
-            'monthly' { New-ScheduledTaskTrigger -Monthly -DaysOfMonth 1     -At $timeStr }
+            'weekly'  { New-ScheduledTaskTrigger -Weekly  -DaysOfWeek $todayDow -At $timeStr }
+            'monthly' { New-ScheduledTaskTrigger -Monthly -DaysOfMonth $todayDom -At $timeStr }
         }
 
         $scriptPath  = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
         $recipesPath = Join-Path $shared.ProjectRoot 'Recipes'
         $psArgs      = "-ExecutionPolicy Bypass -NonInteractive -File `"$scriptPath`" -PreferenceFile `"$($shared.PrefsFile)`" -RecipePath `"$recipesPath`" -SingleRecipe `"$file`""
 
-        $action   = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
-        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
+        $action    = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
+        $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+        $settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
 
         Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
-            -Settings $settings -RunLevel Highest -Force -ErrorAction Stop
+            -Principal $principal -Settings $settings -Force -ErrorAction Stop
 
         Write-Dbg "SetSchedule: registered '$taskName' type=$type time=$timeStr"
         Send-Json $ctx @{ ok = $true; taskName = $taskName; type = $type; startTime = $timeStr }
