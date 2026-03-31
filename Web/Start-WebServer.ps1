@@ -497,6 +497,133 @@ $handlerScript = {
         }
     }
 
+    # ── Schedule helpers ──────────────────────────────────────────────────────
+    function Get-AppNameFromRecipeFile($fileName) {
+        $fullPath = Join-Path $shared.ProjectRoot "Recipes\$fileName"
+        if (-not (Test-Path $fullPath)) { return [System.IO.Path]::GetFileNameWithoutExtension($fileName) }
+        try {
+            [xml]$x = Get-Content $fullPath -Raw
+            $name = $x.ApplicationDef.Application.Name
+            if ($name) { return $name }
+        } catch {}
+        return [System.IO.Path]::GetFileNameWithoutExtension($fileName)
+    }
+
+    function Get-NextAvailableTaskTime {
+        $takenMinutes = [System.Collections.Generic.HashSet[int]]::new()
+        $existingTasks = @(Get-ScheduledTask -TaskName 'CMPackager - *' -ErrorAction SilentlyContinue)
+        foreach ($task in $existingTasks) {
+            foreach ($trigger in $task.Triggers) {
+                if ($trigger.StartBoundary) {
+                    try {
+                        $dt = [datetime]::Parse($trigger.StartBoundary)
+                        $takenMinutes.Add($dt.Hour * 60 + $dt.Minute) | Out-Null
+                    } catch {}
+                }
+            }
+        }
+        $base = 5 * 60  # 05:00
+        $offset = 0
+        while ($takenMinutes.Contains($base + $offset)) { $offset += 5 }
+        $slotMinutes = $base + $offset
+        return [datetime]::Today.AddHours([int]($slotMinutes / 60)).AddMinutes($slotMinutes % 60)
+    }
+
+    function Handle-GetSchedules($ctx) {
+        Write-Dbg 'GetSchedules'
+        $result = @{}
+
+        $tasks = @(Get-ScheduledTask -TaskName 'CMPackager - *' -ErrorAction SilentlyContinue)
+        if (-not $tasks.Count) { Send-Json $ctx $result; return }
+
+        $recipeFiles = @(Get-ChildItem "$($shared.ProjectRoot)\Recipes\*.xml" -ErrorAction SilentlyContinue |
+                         Where-Object { $_.Name -notlike '_*' -and $_.Name -ne 'Template.xml' })
+
+        foreach ($task in $tasks) {
+            $trigger = $task.Triggers | Select-Object -First 1
+            if (-not $trigger) { continue }
+
+            $schedType = switch ($trigger.CimClass.CimClassName) {
+                'MSFT_TaskDailyTrigger'   { 'daily'   }
+                'MSFT_TaskWeeklyTrigger'  { 'weekly'  }
+                'MSFT_TaskMonthlyTrigger' { 'monthly' }
+                default                   { 'unknown' }
+            }
+            $startTime = $null
+            if ($trigger.StartBoundary) {
+                try { $startTime = [datetime]::Parse($trigger.StartBoundary).ToString('HH:mm') } catch {}
+            }
+
+            foreach ($rf in $recipeFiles) {
+                $rName = $null
+                try {
+                    [xml]$x = Get-Content $rf.FullName -Raw
+                    $rName  = $x.ApplicationDef.Application.Name
+                } catch {}
+                if (-not $rName) { $rName = $rf.BaseName }
+
+                $expectedTask = "CMPackager - $($rName -replace '\\', '_')"
+                if ($expectedTask -eq $task.TaskName) {
+                    $result[$rf.Name] = @{ type = $schedType; startTime = $startTime; taskName = $task.TaskName }
+                    break
+                }
+            }
+        }
+
+        Write-Dbg "GetSchedules: $($result.Count) matched"
+        Send-Json $ctx $result
+    }
+
+    function Handle-SetSchedule($ctx) {
+        $body = Read-JsonBody $ctx
+        $file = Get-SafeFilename $body.file
+        $type = ([string]$body.type).ToLower()
+
+        if ($type -notin @('daily','weekly','monthly','none')) {
+            Send-Json $ctx @{ error = 'Invalid type. Must be daily, weekly, monthly, or none.' } 400
+            return
+        }
+
+        $appName  = Get-AppNameFromRecipeFile $file
+        $taskName = "CMPackager - $($appName -replace '\\', '_')"
+
+        if ($type -eq 'none') {
+            $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            if ($existing) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
+            Write-Dbg "SetSchedule: deleted '$taskName'"
+            Send-Json $ctx @{ ok = $true; deleted = $true; taskName = $taskName }
+            return
+        }
+
+        # Preserve existing time slot if task already exists, otherwise find a new one
+        $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+        $startDt  = if ($existing -and $existing.Triggers -and $existing.Triggers[0].StartBoundary) {
+            try { [datetime]::Parse($existing.Triggers[0].StartBoundary) } catch { Get-NextAvailableTaskTime }
+        } else {
+            Get-NextAvailableTaskTime
+        }
+        $timeStr = $startDt.ToString('HH:mm')
+
+        $trigger = switch ($type) {
+            'daily'   { New-ScheduledTaskTrigger -Daily   -At $timeStr }
+            'weekly'  { New-ScheduledTaskTrigger -Weekly  -DaysOfWeek Monday -At $timeStr }
+            'monthly' { New-ScheduledTaskTrigger -Monthly -DaysOfMonth 1     -At $timeStr }
+        }
+
+        $scriptPath  = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
+        $recipesPath = Join-Path $shared.ProjectRoot 'Recipes'
+        $psArgs      = "-ExecutionPolicy Bypass -NonInteractive -File `"$scriptPath`" -PreferenceFile `"$($shared.PrefsFile)`" -RecipePath `"$recipesPath`" -SingleRecipe `"$file`""
+
+        $action   = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $psArgs
+        $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 2) -MultipleInstances IgnoreNew
+
+        Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+            -Settings $settings -RunLevel Highest -Force -ErrorAction Stop
+
+        Write-Dbg "SetSchedule: registered '$taskName' type=$type time=$timeStr"
+        Send-Json $ctx @{ ok = $true; taskName = $taskName; type = $type; startTime = $timeStr }
+    }
+
     # ── Router ────────────────────────────────────────────────────────────────
     $req    = $ctx.Request
     $resp   = $ctx.Response
@@ -525,7 +652,9 @@ $handlerScript = {
         elseif ($method -eq 'POST' -and $path -eq '/api/stop')    { Handle-Stop    $ctx }
         elseif ($method -eq 'GET'  -and $path -eq '/api/stream')  { Handle-Stream  $ctx }
         elseif ($method -eq 'GET'  -and $path -eq '/api/tests')   { Handle-Tests   $ctx }
-        elseif ($method -eq 'GET'  -and $path -eq '/api/sccm')    { Handle-SCCM    $ctx }
+        elseif ($method -eq 'GET'  -and $path -eq '/api/sccm')      { Handle-SCCM        $ctx }
+        elseif ($method -eq 'GET'  -and $path -eq '/api/schedules') { Handle-GetSchedules $ctx }
+        elseif ($method -eq 'POST' -and $path -eq '/api/schedule')  { Handle-SetSchedule  $ctx }
         else {
             $resp.StatusCode = 404
             $bytes = [System.Text.Encoding]::UTF8.GetBytes('Not found')

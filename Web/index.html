@@ -481,6 +481,42 @@ body {
 .text-muted { color: var(--muted); }
 .text-sm { font-size: 12px; }
 .sccm-grid { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── Schedule controls ───────────────────────────────────────────────────── */
+.sched-wrap { position: relative; display: inline-flex; }
+
+.sched-icon {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 7px;
+  background: var(--accent-dim); color: var(--accent-h); border-color: rgba(99,102,241,.35);
+}
+.sched-icon:hover { background: rgba(99,102,241,.25); }
+.sched-icon-weekly  { color: #7dd3fc; background: rgba(56,189,248,.12); border-color: rgba(56,189,248,.3); }
+.sched-icon-weekly:hover  { background: rgba(56,189,248,.2); }
+.sched-icon-monthly { color: #c4b5fd; background: rgba(167,139,250,.12); border-color: rgba(167,139,250,.3); }
+.sched-icon-monthly:hover { background: rgba(167,139,250,.2); }
+
+.sched-btn-add { color: var(--muted); }
+
+.sched-popover {
+  position: absolute; top: calc(100% + 4px); right: 0; z-index: 50;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow);
+  min-width: 152px; overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.sched-popover-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border: none; background: transparent;
+  color: var(--text); font-size: 13px; font-family: inherit;
+  cursor: pointer; white-space: nowrap; transition: background .1s;
+}
+.sched-popover-opt:hover { background: var(--surface-3); }
+.sched-popover-opt.active { color: var(--accent-h); font-weight: 500; }
+.sched-popover-opt.active::after { content: '✓'; margin-left: auto; font-size: 11px; opacity: .8; }
+.sched-popover-sep { height: 1px; background: var(--border); margin: 2px 0; }
+.sched-popover-remove { color: var(--danger); font-size: 12px; padding: 6px 12px; }
+.sched-popover-remove:hover { background: rgba(239,68,68,.08); }
 </style>
 </head>
 <body>

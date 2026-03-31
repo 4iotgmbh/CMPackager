@@ -18,6 +18,7 @@
     testsFilter:  '',
     sccmFilter:   '',
     recipesFilter: { enabled: '', disabled: '' },
+    schedules:    {},
   };
 
   // ── DOM shortcuts ────────────────────────────────────────────────────────
@@ -128,11 +129,101 @@
   }
 
   // ── Recipes ──────────────────────────────────────────────────────────────
+  async function loadSchedules() {
+    const data = await fetchJSON('/api/schedules');
+    if (data) state.schedules = data;
+  }
+
   async function loadRecipes() {
-    const data = await fetchJSON('/api/recipes');
+    const [data] = await Promise.all([fetchJSON('/api/recipes'), loadSchedules()]);
     if (!data) return;
     state.recipes = data;
     renderRecipes();
+  }
+
+  async function setSchedule(file, type) {
+    const r = await fetchJSON('/api/schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file, type }),
+    });
+    if (r?.ok) {
+      showToast(type === 'none' ? `Schedule removed: ${file}` : `Scheduled (${type}): ${file}`, 'success');
+      await loadSchedules();
+      renderRecipes();
+    }
+  }
+  window.setSchedule = setSchedule;
+
+  // ── Schedule widget ───────────────────────────────────────────────────────
+  let activePopover = null;
+
+  function closeActivePopover() {
+    if (activePopover) { activePopover.remove(); activePopover = null; }
+  }
+
+  const SCHED_ICONS = {
+    daily:   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    weekly:  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
+    monthly: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="12" cy="16" r="2" fill="currentColor"/></svg>',
+  };
+  const SCHED_LABELS = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly (1st)' };
+
+  function toggleSchedPopover(wrap, file, currentType) {
+    if (activePopover) {
+      const isSame = activePopover.dataset.file === file;
+      closeActivePopover();
+      if (isSame) return;
+    }
+
+    const pop = document.createElement('div');
+    pop.className = 'sched-popover';
+    pop.dataset.file = file;
+
+    ['daily', 'weekly', 'monthly'].forEach(t => {
+      const opt = document.createElement('button');
+      opt.className = 'sched-popover-opt' + (t === currentType ? ' active' : '');
+      opt.innerHTML = SCHED_ICONS[t] + `<span>${SCHED_LABELS[t]}</span>`;
+      opt.addEventListener('click', () => { closeActivePopover(); setSchedule(file, t); });
+      pop.appendChild(opt);
+    });
+
+    if (currentType) {
+      const sep = document.createElement('div');
+      sep.className = 'sched-popover-sep';
+      pop.appendChild(sep);
+      const remove = document.createElement('button');
+      remove.className = 'sched-popover-opt sched-popover-remove';
+      remove.textContent = 'Remove schedule';
+      remove.addEventListener('click', () => { closeActivePopover(); setSchedule(file, 'none'); });
+      pop.appendChild(remove);
+    }
+
+    wrap.appendChild(pop);
+    activePopover = pop;
+    setTimeout(() => document.addEventListener('click', closeActivePopover, { once: true }), 0);
+  }
+
+  function buildScheduleControl(file, sched) {
+    const wrap = document.createElement('div');
+    wrap.className = 'sched-wrap';
+
+    const type = sched?.type && sched.type !== 'unknown' ? sched.type : null;
+    if (type) {
+      const icon = document.createElement('button');
+      icon.className = `btn btn-sm sched-icon sched-icon-${type}`;
+      icon.title = `${SCHED_LABELS[type]} at ${sched.startTime || '?'} — click to change`;
+      icon.innerHTML = SCHED_ICONS[type];
+      icon.addEventListener('click', e => { e.stopPropagation(); toggleSchedPopover(wrap, file, type); });
+      wrap.appendChild(icon);
+    } else {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm btn-ghost sched-btn-add';
+      btn.textContent = 'Schedule';
+      btn.addEventListener('click', e => { e.stopPropagation(); toggleSchedPopover(wrap, file, null); });
+      wrap.appendChild(btn);
+    }
+    return wrap;
   }
 
   function renderRecipes() {
@@ -143,6 +234,8 @@
   }
 
   function renderRecipeList(container, recipes, side, filter) {
+    closeActivePopover();
+
     const q = (filter || '').trim().toLowerCase();
     const visible = q
       ? recipes.filter(r => [r.appName, r.file, r.publisher].some(f => String(f ?? '').toLowerCase().includes(q)))
@@ -187,6 +280,7 @@
         btnDis.textContent = 'Disable';
         btnDis.addEventListener('click', () => toggleRecipe('disable', r.file));
 
+        actions.appendChild(buildScheduleControl(r.file, state.schedules[r.file]));
         actions.appendChild(btnRun);
         actions.appendChild(btnDis);
       } else {
