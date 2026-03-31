@@ -343,37 +343,12 @@ $handlerScript = {
                             [System.IO.FileAccess]::Read,
                             [System.IO.FileShare]::ReadWrite
                         )
-                        $fileLen = $fs.Length
-                        # Read the tail chunk as raw bytes so we can detect encoding ourselves
-                        $readFrom = $lastLogOffset
-                        $fs.Seek($readFrom, [System.IO.SeekOrigin]::Begin) | Out-Null
-                        $chunkLen = [int]($fileLen - $readFrom)
-                        $rawBytes = [byte[]]::new($chunkLen)
-                        $bytesRead = $fs.Read($rawBytes, 0, $chunkLen)
+                        $fs.Seek($lastLogOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+                        $sr = [System.IO.StreamReader]::new($fs, [System.Text.Encoding]::UTF8)
+                        $newContent = $sr.ReadToEnd()
                         $lastLogOffset = $fs.Position
+                        $sr.Close()
                         $fs.Close()
-
-                        if ($bytesRead -gt 0) {
-                            # Detect UTF-16 LE by counting interior null bytes (every other byte is 0x00 for ASCII chars)
-                            # Sample up to first 256 bytes to decide
-                            $sampleLen  = [Math]::Min($bytesRead, 256)
-                            $nullCount  = 0
-                            for ($bi = 1; $bi -lt $sampleLen; $bi += 2) { if ($rawBytes[$bi] -eq 0) { $nullCount++ } }
-                            $nullRatio  = $nullCount / ([Math]::Ceiling($sampleLen / 2))
-
-                            if ($nullRatio -gt 0.6) {
-                                # UTF-16 LE — align to even byte boundary then decode
-                                $offset = if ($readFrom % 2 -ne 0) { 1 } else { 0 }
-                                $newContent = [System.Text.Encoding]::Unicode.GetString($rawBytes, $offset, $bytesRead - $offset)
-                            } else {
-                                # UTF-8 (or ASCII) — strip any stray null bytes left from a previous UTF-16 section
-                                $cleaned    = [System.Linq.Enumerable]::Where($rawBytes[0..($bytesRead-1)], [Func[byte,bool]]{ param($b) $b -ne 0 })
-                                $cleanBytes = [byte[]]$cleaned
-                                $newContent = [System.Text.Encoding]::UTF8.GetString($cleanBytes)
-                            }
-                        } else {
-                            $newContent = ''
-                        }
 
                         if ($newContent.Length -gt 0) {
                             foreach ($logLine in ($newContent -split "`r?`n")) {
