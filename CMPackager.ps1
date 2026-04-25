@@ -126,6 +126,7 @@ process {
 		# Web server settings
 		$Global:WebServerPort         = $PackagerPrefs.PackagerPrefs.WebServerPort
 		$Global:WebServerRequiredRole = $PackagerPrefs.PackagerPrefs.WebServerRequiredRole
+		$Global:PreferenceFile        = $PreferenceFile
 	}
 
 	$Global:ConfigMgrConnection = $false
@@ -2431,7 +2432,8 @@ function Get-InstallerURLfromWinget {
 			$distBadge = if ($r.Distribute -eq 'True') { '<span class="badge byes">Yes</span>' } else { '<span class="badge bno">No</span>' }
 			$depBadge  = if ($r.Deploy -eq 'True') { '<span class="badge byes">Yes</span>' } else { '<span class="badge bno">No</span>' }
 			$dtHtml    = if ($r.DtCount -gt 0) { "<span class='cnt'>$($r.DtCount)</span> $($enc::HtmlEncode($r.DtNames))" } else { '<em>none</em>' }
-			"<tr><td><strong>$($enc::HtmlEncode($r.Name))</strong><br><small>$($enc::HtmlEncode($r.FileName))</small></td><td>$($enc::HtmlEncode($r.Publisher))</td><td>$($enc::HtmlEncode($r.Description))</td><td>$dtHtml</td><td>$urlBadge</td><td>$distBadge</td><td>$depBadge</td></tr>"
+			$runUrl    = '/run?recipe=' + [System.Uri]::EscapeDataString($r.FileName)
+			"<tr><td><strong>$($enc::HtmlEncode($r.Name))</strong><br><small>$($enc::HtmlEncode($r.FileName))</small></td><td>$($enc::HtmlEncode($r.Publisher))</td><td>$($enc::HtmlEncode($r.Description))</td><td>$dtHtml</td><td>$urlBadge</td><td>$distBadge</td><td>$depBadge</td><td><a class='run-btn' href='$runUrl'>&#9654; Run</a></td></tr>"
 		}
 		$rowsHtml  = $rows -join "`n"
 		$count     = $recipes.Count
@@ -2458,13 +2460,15 @@ small{color:#605e5c;font-family:'Cascadia Code',Consolas,monospace;font-size:11p
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
 .bdyn{background:#deecf9;color:#004e8c}.bsta{background:#e8e8e8;color:#444}
 .byes{background:#dff6dd;color:#107c10}.bno{background:#fde7e9;color:#a4262c}
+.run-btn{display:inline-block;padding:4px 12px;background:#0078d4;color:#fff;border-radius:4px;text-decoration:none;font-size:12px;font-weight:600;white-space:nowrap}
+.run-btn:hover{background:#106ebe}
 </style></head>
 <body>
 <div class="bar"><h1>CMPackager</h1><span class="sub">Recipe Browser</span></div>
 <div class="wrap">
 <p class="meta">$count recipe(s) | loaded $timestamp</p>
 <table>
-<thead><tr><th>Application</th><th>Publisher</th><th>Description</th><th>Deployment Types</th><th>URL</th><th>Distribute</th><th>Deploy</th></tr></thead>
+<thead><tr><th>Application</th><th>Publisher</th><th>Description</th><th>Deployment Types</th><th>URL</th><th>Distribute</th><th>Deploy</th><th></th></tr></thead>
 <tbody>
 $rowsHtml
 </tbody></table></div></body></html>
@@ -2541,6 +2545,76 @@ code{font-family:'Cascadia Code',Consolas,monospace;background:#f3f2f1;padding:2
 "@
 	}
 
+	function New-RunOutputPageHtml {
+		param([string]$RecipeName, [string]$JobId, [string]$State, [string]$Output, [datetime]$StartTime)
+		$isDone = $State -in @('Completed', 'Failed', 'Stopped')
+		$refreshMeta = if ($isDone) { '' } else { '<meta http-equiv="refresh" content="3">' }
+		if ($State -eq 'Completed') { $stCls = 'byes'; $stTxt = 'Done' }
+		elseif ($State -eq 'Failed') { $stCls = 'bno';  $stTxt = 'Failed' }
+		else                         { $stCls = 'brun'; $stTxt = 'Running...' }
+		$enc       = [System.Net.WebUtility]
+		$safeName  = $enc::HtmlEncode($RecipeName)
+		$safeOut   = $enc::HtmlEncode($Output)
+		$elapsed   = ([datetime]::Now - $StartTime).ToString('mm\:ss')
+		return @"
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+$refreshMeta
+<title>CMPackager - $safeName</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;background:#f3f2f1;color:#323130;min-height:100vh}
+.bar{background:#0078d4;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px}
+.bar h1{font-size:18px;font-weight:600}.bar a{color:#fff;opacity:.8;text-decoration:none;font-size:13px;margin-left:auto}
+.bar a:hover{opacity:1}
+.wrap{padding:24px;max-width:1200px;margin:0 auto}
+.info{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.info h2{font-size:16px;font-weight:600}
+.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
+.byes{background:#dff6dd;color:#107c10}.bno{background:#fde7e9;color:#a4262c}.brun{background:#deecf9;color:#004e8c}
+.elapsed{font-size:12px;color:#605e5c;margin-left:auto}
+pre{background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:4px;font-family:'Cascadia Code',Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;min-height:200px;max-height:70vh;overflow-y:auto}
+</style></head>
+<body>
+<div class="bar"><h1>CMPackager</h1><span style="opacity:.8;font-size:13px">Run Output</span><a href="/">&#8592; Back to Recipes</a></div>
+<div class="wrap">
+<div class="info">
+  <h2>$safeName</h2>
+  <span class="badge $stCls">$stTxt</span>
+  <span class="elapsed">$elapsed elapsed</span>
+</div>
+<pre>$safeOut</pre>
+</div>
+</body></html>
+"@
+	}
+
+	function Start-RecipeRun {
+		param([string]$RecipeName, [string]$RecipesFolder)
+		$jobId    = [System.Guid]::NewGuid().ToString('N').Substring(0, 16)
+		$logFile  = Join-Path $Global:TempDir "webjob_${jobId}.log"
+		$scriptPath = $PSCommandPath
+		$prefsFile  = $Global:PreferenceFile
+		$job = Start-Job -ScriptBlock {
+			param($sp, $rn, $pf, $lf)
+			try {
+				& $sp -SingleRecipe $rn -PreferenceFile $pf 2>&1 |
+					ForEach-Object { $_.ToString() } |
+					Out-File -FilePath $lf -Encoding utf8 -Append
+			} catch {
+				"ERROR: $_" | Out-File -FilePath $lf -Encoding utf8 -Append
+			}
+		} -ArgumentList @($scriptPath, $RecipeName, $prefsFile, $logFile)
+		$script:WebJobs[$jobId] = [pscustomobject]@{
+			Job       = $job
+			LogFile   = $logFile
+			Recipe    = $RecipeName
+			StartTime = Get-Date
+		}
+		return $jobId
+	}
+
 	function New-ErrorPageHtml {
 		param([int]$StatusCode, [string]$Message)
 		$enc = [System.Net.WebUtility]
@@ -2571,27 +2645,36 @@ p{color:#605e5c;font-size:14px}
 		$Response.OutputStream.Close()
 	}
 
+	function Send-WebRedirect {
+		param($Response, [string]$Location)
+		$Response.StatusCode = 302
+		$Response.AddHeader('Location', $Location)
+		$Response.ContentLength64 = 0
+		$Response.OutputStream.Close()
+	}
+
 	function Invoke-WebServerRequest {
 		param($Context, [string]$RecipesFolder)
 		$req      = $Context.Request
 		$resp     = $Context.Response
 		$identity = $Context.User.Identity
 
-		# If the request arrived anonymously, issue a Negotiate challenge and return.
-		# The browser will re-issue the request with credentials in the Authorization header.
-		$isAuthenticated = $identity -and $identity.IsAuthenticated -and $identity.Name
+		# With Negotiate-only mode HTTP.sys guarantees every context is authenticated.
+		# This block is a defensive fallback only — it should never fire in practice.
+		$isAuthenticated = $identity -and $identity.IsAuthenticated -and ($identity.Name -ne '')
 		if (-not $isAuthenticated) {
-			Add-LogContent "WebServer: anonymous request from $($req.RemoteEndPoint) - issuing Negotiate challenge"
-			$resp.AddHeader('WWW-Authenticate', 'Negotiate')
-			$body = New-AuthRequiredPageHtml -ServerHost $req.Url.Host
-			Send-WebResponse -Response $resp -StatusCode 401 -Body $body
+			Add-LogContent "WebServer: WARNING - unauthenticated context from $($req.RemoteEndPoint) (unexpected with Negotiate-only)"
+			$body = New-AccessDeniedPageHtml -LogonName '(unknown)' -RequiredRole $Global:WebServerRequiredRole
+			Send-WebResponse -Response $resp -StatusCode 403 -Body $body
 			return
 		}
 
 		$logonName = $identity.Name
-		Add-LogContent "WebServer: $($req.HttpMethod) $($req.Url.LocalPath) from $($req.RemoteEndPoint) user=$logonName"
+		$authType  = try { $identity.AuthenticationType } catch { 'unknown' }
+		Add-LogContent "WebServer: $($req.HttpMethod) $($req.Url.LocalPath) from $($req.RemoteEndPoint) user=$logonName auth=$authType"
 
 		$isAdmin = Test-SCCMAdminAccess -LogonName $logonName
+		Add-LogContent "WebServer: SCCM admin check for '$logonName' = $isAdmin"
 		if ($isAdmin -ne $true) {
 			$body = New-AccessDeniedPageHtml -LogonName $logonName -RequiredRole $Global:WebServerRequiredRole
 			Send-WebResponse -Response $resp -StatusCode 403 -Body $body
@@ -2602,12 +2685,47 @@ p{color:#605e5c;font-size:14px}
 		if ($path -eq '' -or $path -eq '/') {
 			try {
 				$body = New-RecipesPageHtml -RecipesFolder $RecipesFolder
+				Add-LogContent "WebServer: sending recipes page ($($body.Length) chars)"
 				Send-WebResponse -Response $resp -StatusCode 200 -Body $body
 			} catch {
 				Add-LogContent "WebServer: error building recipes page - $($_.Exception.Message)"
 				$body = New-ErrorPageHtml -StatusCode 503 -Message 'Failed to load recipe data.'
 				Send-WebResponse -Response $resp -StatusCode 503 -Body $body
 			}
+		} elseif ($path -eq '/run') {
+			$recipeName = $req.QueryString['recipe']
+			if ([string]::IsNullOrWhiteSpace($recipeName) -or $recipeName -match '[/\\]' -or -not $recipeName.EndsWith('.xml')) {
+				$body = New-ErrorPageHtml -StatusCode 400 -Message 'Invalid recipe name.'
+				Send-WebResponse -Response $resp -StatusCode 400 -Body $body
+				return
+			}
+			$recipePath = Join-Path $RecipesFolder $recipeName
+			if (-not (Test-Path $recipePath -PathType Leaf)) {
+				$body = New-ErrorPageHtml -StatusCode 404 -Message "Recipe '$recipeName' not found."
+				Send-WebResponse -Response $resp -StatusCode 404 -Body $body
+				return
+			}
+			try {
+				$jobId = Start-RecipeRun -RecipeName $recipeName -RecipesFolder $RecipesFolder
+				Add-LogContent "WebServer: started job $jobId for recipe '$recipeName'"
+				Send-WebRedirect -Response $resp -Location "/output?job=$jobId"
+			} catch {
+				Add-LogContent "WebServer: error starting recipe run - $($_.Exception.Message)"
+				$body = New-ErrorPageHtml -StatusCode 503 -Message 'Failed to start recipe run.'
+				Send-WebResponse -Response $resp -StatusCode 503 -Body $body
+			}
+		} elseif ($path -eq '/output') {
+			$jobId   = $req.QueryString['job']
+			$jobInfo = if ($jobId) { $script:WebJobs[$jobId] } else { $null }
+			if (-not $jobInfo) {
+				$body = New-ErrorPageHtml -StatusCode 404 -Message 'Job not found.'
+				Send-WebResponse -Response $resp -StatusCode 404 -Body $body
+				return
+			}
+			$output = if (Test-Path $jobInfo.LogFile) { Get-Content $jobInfo.LogFile -Raw -Encoding UTF8 } else { '(no output yet)' }
+			$state  = $jobInfo.Job.State
+			$body   = New-RunOutputPageHtml -RecipeName $jobInfo.Recipe -JobId $jobId -State $state -Output $output -StartTime $jobInfo.StartTime
+			Send-WebResponse -Response $resp -StatusCode 200 -Body $body
 		} else {
 			$body = New-ErrorPageHtml -StatusCode 404 -Message 'Page not found.'
 			Send-WebResponse -Response $resp -StatusCode 404 -Body $body
@@ -2639,7 +2757,8 @@ p{color:#605e5c;font-size:14px}
 	function Start-CMPackagerWebServer {
 		$portRef = [ref]0
 		$port    = if ($Global:WebServerPort -and [int]::TryParse([string]$Global:WebServerPort, $portRef) -and $portRef.Value -ge 1 -and $portRef.Value -le 65535) { $portRef.Value } else { 8080 }
-		$recipesFolder = Join-Path $PSScriptRoot 'Recipes'
+		$recipesFolder  = Join-Path $PSScriptRoot 'Recipes'
+		$script:WebJobs = @{}
 
 		$fqdn = try { [System.Net.Dns]::GetHostEntry('localhost').HostName } catch { $env:COMPUTERNAME }
 
