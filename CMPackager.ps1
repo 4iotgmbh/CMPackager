@@ -2676,9 +2676,21 @@ p{color:#605e5c;font-size:14px}
 			while ($listener.IsListening) {
 				$context = $null
 				try {
-					$context = $listener.GetContext()
+					$ctxTask = $listener.GetContextAsync()
+					while (-not $ctxTask.IsCompleted) {
+						Start-Sleep -Milliseconds 200
+					}
+					$context = $ctxTask.GetAwaiter().GetResult()
 				} catch [System.Net.HttpListenerException] {
 					break
+				} catch [System.AggregateException] {
+					$inner = $_.Exception.InnerException
+					if ($inner -is [System.Net.HttpListenerException]) { break }
+					Add-LogContent "WebServer: error accepting connection - $($inner.Message)"
+					continue
+				} catch [System.InvalidOperationException] {
+					Add-LogContent "WebServer: auth exchange failed ($($_.Exception.Message)) - continuing"
+					continue
 				}
 				if ($null -eq $context) { continue }
 				try {
@@ -2691,6 +2703,8 @@ p{color:#605e5c;font-size:14px}
 					} catch {}
 				}
 			}
+		} catch [System.Management.Automation.PipelineStoppedException] {
+			Add-LogContent "WebServer: stopping (Ctrl+C)"
 		} catch {
 			Add-LogContent "WebServer: fatal error - $($_.Exception.Message)"
 			Write-Host "WebServer error: $($_.Exception.Message)" -ForegroundColor Red
@@ -2698,7 +2712,7 @@ p{color:#605e5c;font-size:14px}
 			if ($listener.IsListening) { $listener.Stop() }
 			$listener.Close()
 			Add-LogContent "WebServer stopped."
-			Write-Host "CMPackager web server stopped." -ForegroundColor Yellow
+			Write-Host "`nCMPackager web server stopped." -ForegroundColor Yellow
 		}
 	}
 
