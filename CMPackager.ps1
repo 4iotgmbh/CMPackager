@@ -2589,9 +2589,14 @@ p{color:#605e5c;font-size:14px}
 		# stall GetContext() indefinitely when NTLM/Kerberos negotiation does not complete.
 		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate -bor [System.Net.AuthenticationSchemes]::Anonymous
 
+		# Use the strong wildcard prefix (http://+:port/) so HTTP.sys routes all requests
+		# on this port to our queue regardless of the Host header value (IP, hostname, FQDN).
+		# Specific-hostname prefixes only match exact Host headers, causing 503 for any mismatch.
+		$listenerPrefix = "http://+:$port/"
+		$listener.Prefixes.Add($listenerPrefix)
+		Write-Host "Binding to $listenerPrefix" -ForegroundColor Cyan
 		foreach ($p in $prefixes) {
-			$listener.Prefixes.Add($p)
-			Write-Host "Listening on $p" -ForegroundColor Cyan
+			Write-Host "  Accessible at $p" -ForegroundColor Cyan
 		}
 
 		try {
