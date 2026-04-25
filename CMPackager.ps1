@@ -2648,12 +2648,11 @@ p{color:#605e5c;font-size:14px}
 		Register-SPNForWebServer -Fqdn $fqdn -Port $port
 
 		$listener = New-Object System.Net.HttpListener
-		# Allow anonymous so all requests reach GetContext(). Unauthenticated requests get a
-		# 401 + WWW-Authenticate: Negotiate challenge from our code. Domain browsers respond
-		# automatically when the URL is in the intranet zone (FQDN access). Negotiate-only
-		# mode makes HTTP.sys handle auth before queuing, which can block GetContext() for
-		# browsers that do not respond to the kernel-level challenge.
-		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate -bor [System.Net.AuthenticationSchemes]::Anonymous
+		# Negotiate-only: HTTP.sys owns the complete NTLM/Kerberos handshake (Type1->Challenge->
+		# Type3) before queuing to GetContext(). Anonymous must NOT be included — when both are
+		# set, HTTP.sys hands each message to the app individually instead of managing the exchange
+		# itself, causing every NTLM Type-1 to arrive as an anonymous request and loop forever.
+		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate
 
 		# Use the strong wildcard prefix so HTTP.sys routes all requests on this port to our
 		# queue regardless of the Host header (IP, short name, FQDN). Specific-hostname
