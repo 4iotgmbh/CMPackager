@@ -658,8 +658,8 @@ function Get-InstallerURLfromWinget {
 					$errMsg = $_.Exception.Message
 					Add-LogContent "ERROR: PrefetchScript failed for $($ApplicationName)"
 					Add-LogContent "ERROR: $errMsg"
-					Write-Output "ERROR: PrefetchScript failed for $($ApplicationName)"
-					Write-Output $errMsg
+					Write-Host "ERROR: PrefetchScript failed for $($ApplicationName)" -ForegroundColor Red
+					Write-Host $errMsg -ForegroundColor Red
 					if ($Global:NotifyOnDownloadFailure) {
 						$Global:SendEmail = $true; $Global:SendEmail | Out-Null
 						$Global:EmailBody += "   - PrefetchScript failed for $($ApplicationName): $errMsg`n"
@@ -2299,6 +2299,64 @@ function Get-InstallerURLfromWinget {
 		throw 'Webserver support is not yet implemented.'
 	}
 
+	function Test-GitHubApiAccess {
+		if ($Global:GitHubToken) {
+			Add-LogContent 'GitHub API: authenticated via prefs token (5,000 req/hr)'
+		} elseif ($env:GITHUB_TOKEN) {
+			Add-LogContent 'GitHub API: authenticated via GITHUB_TOKEN env var (5,000 req/hr)'
+		} else {
+			Add-LogContent 'GitHub API: unauthenticated (60 req/hr cap)'
+		}
+
+		$headers = Get-GitHubAuthHeaders -PrefsToken $Global:GitHubToken
+		$headers['Accept'] = 'application/vnd.github.v3+json'
+
+		try {
+			$rateLimit = Invoke-RestMethod -Uri 'https://api.github.com/rate_limit' -Headers $headers -ErrorAction Stop
+			$core      = $rateLimit.resources.core
+			$remaining = [int]$core.remaining
+			$limit     = [int]$core.limit
+			$resetAt   = [DateTimeOffset]::FromUnixTimeSeconds([long]$core.reset).LocalDateTime.ToString('HH:mm:ss')
+
+			if ($remaining -eq 0) {
+				$msg = "GitHub API rate limit exhausted (0/$limit requests remaining, resets at $resetAt).`n  ACTION: Add or refresh a GitHub token as <GitHubToken> in CMPackager.prefs (or the GITHUB_TOKEN environment variable) to raise the limit to 5,000 req/hr."
+				Add-LogContent "ERROR: $msg"
+				Write-Output "ERROR: $msg"
+				return $false
+			}
+
+			$statusMsg = "GitHub API: $remaining/$limit requests remaining (resets at $resetAt)."
+			Add-LogContent $statusMsg
+			Write-Output $statusMsg
+			return $true
+		}
+		catch {
+			$statusCode = $null
+			if ($_.Exception.Response) {
+				$statusCode = [int]$_.Exception.Response.StatusCode
+			} elseif ($_.Exception -is [Microsoft.PowerShell.Commands.HttpResponseException]) {
+				$statusCode = [int]$_.Exception.StatusCode
+			}
+
+			if ($statusCode -eq 401) {
+				$msg = "GitHub API returned 401 Unauthorized. The configured token is invalid or expired.`n  ACTION: Generate a new personal access token at https://github.com/settings/tokens and set it as <GitHubToken> in CMPackager.prefs (or in the GITHUB_TOKEN environment variable)."
+				Add-LogContent "ERROR: $msg"
+				Write-Output "ERROR: $msg"
+				return $false
+			} elseif ($statusCode -eq 403) {
+				$msg = "GitHub API returned 403 Forbidden. The anonymous rate limit has been reached.`n  ACTION: Add a GitHub personal access token as <GitHubToken> in CMPackager.prefs (or GITHUB_TOKEN env var) to raise the limit to 5,000 req/hr."
+				Add-LogContent "ERROR: $msg"
+				Write-Output "ERROR: $msg"
+				return $false
+			} else {
+				$msg = "GitHub API connectivity check failed ($($_.Exception.Message)). Proceeding — recipes without GitHub URLs will still run."
+				Add-LogContent "WARNING: $msg"
+				Write-Output "WARNING: $msg"
+				return $true
+			}
+		}
+	}
+
 	################################### MAIN ########################################
 	## Startup
 	if ($Setup) {
@@ -2354,12 +2412,10 @@ function Get-InstallerURLfromWinget {
 
 	## Get the Recipes
 	$RecipeList = Get-ChildItem $RecipePath | Select-Object -Property Name -ExpandProperty Name | Where-Object -Property Name -NE "Template.xml" | Sort-Object -Property Name
-	if ($Global:GitHubToken) {
-		Add-LogContent -Content "GitHub API: authenticated via prefs token (5,000 req/hr)"
-	} elseif ($env:GITHUB_TOKEN) {
-		Add-LogContent -Content "GitHub API: authenticated via GITHUB_TOKEN env var (5,000 req/hr)"
-	} else {
-		Add-LogContent -Content "GitHub API: unauthenticated (60 req/hr cap)"
+	if (-not (Test-GitHubApiAccess)) {
+		Add-LogContent 'Aborting: recipe processing will not start due to GitHub API access failure.'
+		Write-Output 'Aborting: recipe processing will not start. See the log for details and corrective action.'
+		exit 1
 	}
 	Add-LogContent -Content "All Recipes: $RecipeList"
 	if (-not ([System.String]::IsNullOrEmpty($PSBoundParameters.SingleRecipe))) {
