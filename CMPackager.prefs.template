@@ -37,4 +37,9 @@
 	     Raises the GitHub API quota from 60 to 5,000 requests/hour. Leave empty to fall back
 	     to the GITHUB_TOKEN environment variable, or anonymous access if neither is set. -->
 	<GitHubToken></GitHubToken>
+	<!-- WebServerPort - [Int] TCP port for the built-in web server (used with -WebServer switch) -->
+	<WebServerPort>8080</WebServerPort>
+	<!-- WebServerRequiredRole - [String] Optional SCCM role name required for web server access.
+	     Leave empty to allow all SCCM administrative users. -->
+	<WebServerRequiredRole></WebServerRequiredRole>
 </PackagerPrefs>

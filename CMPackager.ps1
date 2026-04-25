@@ -122,6 +122,10 @@ process {
 
 		# GitHub API token — raises quota from 60 to 5,000 req/hr
 		$Global:GitHubToken = $PackagerPrefs.PackagerPrefs.GitHubToken
+
+		# Web server settings
+		$Global:WebServerPort         = $PackagerPrefs.PackagerPrefs.WebServerPort
+		$Global:WebServerRequiredRole = $PackagerPrefs.PackagerPrefs.WebServerRequiredRole
 	}
 
 	$Global:ConfigMgrConnection = $false
@@ -2030,6 +2034,12 @@ function Get-InstallerURLfromWinget {
 			if ([string]::IsNullOrWhiteSpace($Settings.EmailFrom) -or $Settings.EmailFrom -notmatch '@') { [void]$e.Add('Email From must be a valid email address.') }
 			if ([string]::IsNullOrWhiteSpace($Settings.EmailServer))                                     { [void]$e.Add('SMTP Server is required when email reports are enabled.') }
 		}
+		if ($Settings.ContainsKey('WebServerPort') -and -not [string]::IsNullOrWhiteSpace($Settings.WebServerPort)) {
+			$portInt = 0
+			if (-not ([int]::TryParse($Settings.WebServerPort, [ref]$portInt)) -or $portInt -lt 1 -or $portInt -gt 65535) {
+				[void]$e.Add('Web Server Port must be a number between 1 and 65535.')
+			}
+		}
 		return ,$e
 	}
 
@@ -2112,6 +2122,10 @@ function Get-InstallerURLfromWinget {
 		$s.ContentFolderPattern      = $Defaults.ContentFolderPattern
 		$s.CMPSModulePath            = $Defaults.CMPSModulePath
 		$s.GitHubToken               = $Defaults.GitHubToken
+		Write-Host ''
+		Write-Host '-- Web Server --' -ForegroundColor Yellow
+		$s.WebServerPort         = prompt-field 'Web Server Port' $Defaults.WebServerPort { param($v) $v -match '^\d+$' -and [int]$v -ge 1 -and [int]$v -le 65535 } 'Must be a number between 1 and 65535.'
+		$s.WebServerRequiredRole = prompt-field 'Required SCCM Role (leave blank for any admin)' $Defaults.WebServerRequiredRole -optional
 
 		Write-Host ''
 		Write-Host '-- Review --' -ForegroundColor Yellow
@@ -2129,6 +2143,8 @@ function Get-InstallerURLfromWinget {
 			'Notify on Failure'         = $s.NotifyOnDownloadFailure
 			'Distribution Point Group'  = if ($s.PreferredDistributionLoc) { $s.PreferredDistributionLoc } else { '(empty)' }
 			'Deployment Collection'     = if ($s.PreferredDeployCollection) { $s.PreferredDeployCollection } else { '(empty)' }
+			'Web Server Port'           = $s.WebServerPort
+			'Required SCCM Role'        = if ($s.WebServerRequiredRole) { $s.WebServerRequiredRole } else { '(any admin)' }
 		}
 		foreach ($pair in $reviewItems.GetEnumerator()) {
 			Write-Host ("  {0,-30} {1}" -f "$($pair.Key):", $pair.Value)
@@ -2198,6 +2214,11 @@ function Get-InstallerURLfromWinget {
 		$s.GitHubToken               = $Defaults.GitHubToken
 
 		Write-Host ''
+		Write-SpectreRule -Title 'Web Server' -Color 'Grey'
+		$s.WebServerPort         = read-required 'Web Server Port' $Defaults.WebServerPort { param($v) $v -match '^\d+$' -and [int]$v -ge 1 -and [int]$v -le 65535 } 'Must be a number between 1 and 65535.'
+		$s.WebServerRequiredRole = Read-SpectreText -Message 'Required SCCM Role (leave blank for any admin)' -DefaultAnswer $Defaults.WebServerRequiredRole -AllowEmpty
+
+		Write-Host ''
 		Write-SpectreRule -Title 'Review' -Color 'Grey'
 		$tableData = @(
 			[pscustomobject]@{ Setting = 'Working Directory';         Value = $s.TempDir }
@@ -2213,6 +2234,8 @@ function Get-InstallerURLfromWinget {
 			[pscustomobject]@{ Setting = 'Notify on Failure';         Value = $s.NotifyOnDownloadFailure }
 			[pscustomobject]@{ Setting = 'Distribution Point Group';  Value = if ($s.PreferredDistributionLoc) { $s.PreferredDistributionLoc } else { '(empty)' } }
 			[pscustomobject]@{ Setting = 'Deployment Collection';     Value = if ($s.PreferredDeployCollection) { $s.PreferredDeployCollection } else { '(empty)' } }
+			[pscustomobject]@{ Setting = 'Web Server Port';           Value = $s.WebServerPort }
+			[pscustomobject]@{ Setting = 'Required SCCM Role';        Value = if ($s.WebServerRequiredRole) { $s.WebServerRequiredRole } else { '(any admin)' } }
 		)
 		Format-SpectreTable -Data $tableData -Color 'Grey'
 
@@ -2246,6 +2269,8 @@ function Get-InstallerURLfromWinget {
 			ContentFolderPattern      = $xml.PackagerPrefs.ContentFolderPattern
 			CMPSModulePath            = $xml.PackagerPrefs.CMPSModulePath
 			GitHubToken               = $xml.PackagerPrefs.GitHubToken
+			WebServerPort             = $xml.PackagerPrefs.WebServerPort
+			WebServerRequiredRole     = $xml.PackagerPrefs.WebServerRequiredRole
 		}
 
 		$useSpectre = $false
@@ -2295,8 +2320,297 @@ function Get-InstallerURLfromWinget {
 		Write-Host "Configuration saved to $PreferenceFile" -ForegroundColor Green
 	}
 
+	function Get-WebServerPrefixes {
+		param([int]$Port)
+		$prefixes = New-Object System.Collections.Generic.List[string]
+		[void]$prefixes.Add("http://localhost:$Port/")
+		try {
+			$netProfiles = Get-NetConnectionProfile -ErrorAction SilentlyContinue |
+				Where-Object { $_.NetworkCategory -in @('Private', 'DomainAuthenticated') }
+			foreach ($netProfile in $netProfiles) {
+				$addrs = Get-NetIPAddress -InterfaceIndex $netProfile.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+					Where-Object { $_.IPAddress -notmatch '^169\.254\.' }
+				foreach ($addr in $addrs) {
+					$prefix = "http://$($addr.IPAddress):$Port/"
+					if (-not $prefixes.Contains($prefix)) { [void]$prefixes.Add($prefix) }
+				}
+			}
+		} catch {
+			Add-LogContent "WebServer: could not enumerate network interfaces - $($_.Exception.Message)"
+		}
+		return [string[]]$prefixes
+	}
+
+	function Register-WebServerUrlAcl {
+		param([int]$Port)
+		$url = "http://+:$Port/"
+		$existing = (& netsh http show urlacl url=$url 2>&1) | Out-String
+		if ($existing -notmatch 'Reserved URL') {
+			$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+			Add-LogContent "WebServer: registering URL ACL for $url (user: $currentUser)"
+			try {
+				$cmdArgs = @('http', 'add', 'urlacl', "url=$url", "user=$currentUser")
+				$result = (& netsh @cmdArgs 2>&1) | Out-String
+				Add-LogContent "WebServer: URL ACL result - $($result.Trim())"
+			} catch {
+				Add-LogContent "WebServer: URL ACL registration failed - $($_.Exception.Message)"
+				Write-Host "WARNING: Could not register URL ACL. Run as administrator if the server fails to start." -ForegroundColor Yellow
+			}
+		} else {
+			Add-LogContent "WebServer: URL ACL already registered for $url"
+		}
+	}
+
+	function Test-SCCMAdminAccess {
+		param([string]$LogonName)
+		if ([string]::IsNullOrWhiteSpace($Global:SiteCode) -or [string]::IsNullOrWhiteSpace($Global:SiteServer)) {
+			Add-LogContent "WebServer: SCCM site not configured - cannot verify admin access for '$LogonName'"
+			return $null
+		}
+		try {
+			$safeName = $LogonName.Replace('\', '\\').Replace("'", "''")
+			$admins = Get-WmiObject -Namespace "root\SMS\site_$Global:SiteCode" `
+				-ComputerName $Global:SiteServer `
+				-Query "SELECT LogonName FROM SMS_Admin WHERE LogonName = '$safeName'" `
+				-ErrorAction Stop
+			return ($null -ne $admins)
+		} catch {
+			Add-LogContent "WebServer: SCCM admin check failed for '$LogonName' - $($_.Exception.Message)"
+			return $null
+		}
+	}
+
+	function Get-RecipeSummaries {
+		param([string]$RecipesFolder)
+		$summaries = New-Object System.Collections.Generic.List[psobject]
+		$xmlFiles = Get-ChildItem -Path $RecipesFolder -Filter '*.xml' -ErrorAction SilentlyContinue |
+			Where-Object { $_.Name -ne 'Template.xml' } |
+			Sort-Object Name
+		foreach ($f in $xmlFiles) {
+			try {
+				[xml]$r = Get-Content $f.FullName
+				$app = $r.ApplicationDef.Application
+				$dts = @($r.ApplicationDef.DeploymentTypes.DeploymentType)
+				$hasPrefetch = $false
+				foreach ($dl in @($r.ApplicationDef.Downloads.Download)) {
+					if (-not [string]::IsNullOrWhiteSpace($dl.PrefetchScript)) { $hasPrefetch = $true }
+				}
+				[void]$summaries.Add([pscustomobject]@{
+					Name        = [string]$app.Name
+					Publisher   = [string]$app.Publisher
+					Description = [string]$app.Description
+					FileName    = $f.Name
+					DtCount     = $dts.Count
+					DtNames     = ($dts | ForEach-Object { $_.Name }) -join ', '
+					HasPrefetch = $hasPrefetch
+					Distribute  = [string]$r.ApplicationDef.Distribution.DistributeContent
+					Deploy      = [string]$r.ApplicationDef.Deployment.DeploySoftware
+				})
+			} catch {
+				[void]$summaries.Add([pscustomobject]@{
+					Name        = $f.BaseName
+					Publisher   = ''
+					Description = "(Parse error: $($_.Exception.Message))"
+					FileName    = $f.Name
+					DtCount     = 0
+					DtNames     = ''
+					HasPrefetch = $false
+					Distribute  = ''
+					Deploy      = ''
+				})
+			}
+		}
+		return $summaries
+	}
+
+	function New-RecipesPageHtml {
+		param([string]$RecipesFolder)
+		$enc       = [System.Net.WebUtility]
+		$recipes   = Get-RecipeSummaries -RecipesFolder $RecipesFolder
+		$rows = foreach ($r in $recipes) {
+			$urlBadge  = if ($r.HasPrefetch) { '<span class="badge bdyn">Dynamic</span>' } else { '<span class="badge bsta">Static</span>' }
+			$distBadge = if ($r.Distribute -eq 'True') { '<span class="badge byes">Yes</span>' } else { '<span class="badge bno">No</span>' }
+			$depBadge  = if ($r.Deploy -eq 'True') { '<span class="badge byes">Yes</span>' } else { '<span class="badge bno">No</span>' }
+			$dtHtml    = if ($r.DtCount -gt 0) { "<span class='cnt'>$($r.DtCount)</span> $($enc::HtmlEncode($r.DtNames))" } else { '<em>none</em>' }
+			"<tr><td><strong>$($enc::HtmlEncode($r.Name))</strong><br><small>$($enc::HtmlEncode($r.FileName))</small></td><td>$($enc::HtmlEncode($r.Publisher))</td><td>$($enc::HtmlEncode($r.Description))</td><td>$dtHtml</td><td>$urlBadge</td><td>$distBadge</td><td>$depBadge</td></tr>"
+		}
+		$rowsHtml  = $rows -join "`n"
+		$count     = $recipes.Count
+		$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm'
+		return @"
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CMPackager - Recipes</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;background:#f3f2f1;color:#323130;min-height:100vh}
+.bar{background:#0078d4;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px}
+.bar h1{font-size:18px;font-weight:600}.bar .sub{font-size:13px;opacity:.8}
+.wrap{padding:24px;max-width:1400px;margin:0 auto}
+.meta{margin-bottom:16px;font-size:13px;color:#605e5c}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+thead tr{background:#f8f8f8}
+th{padding:10px 14px;text-align:left;font-weight:600;font-size:12px;color:#605e5c;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #edebe9}
+td{padding:10px 14px;border-bottom:1px solid #edebe9;vertical-align:top}
+tr:last-child td{border-bottom:none}tr:hover td{background:#f3f2f1}
+small{color:#605e5c;font-family:'Cascadia Code',Consolas,monospace;font-size:11px}
+.cnt{display:inline-block;background:#e1dfdd;color:#323130;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:600;margin-right:4px}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.bdyn{background:#deecf9;color:#004e8c}.bsta{background:#e8e8e8;color:#444}
+.byes{background:#dff6dd;color:#107c10}.bno{background:#fde7e9;color:#a4262c}
+</style></head>
+<body>
+<div class="bar"><h1>CMPackager</h1><span class="sub">Recipe Browser</span></div>
+<div class="wrap">
+<p class="meta">$count recipe(s) | loaded $timestamp</p>
+<table>
+<thead><tr><th>Application</th><th>Publisher</th><th>Description</th><th>Deployment Types</th><th>URL</th><th>Distribute</th><th>Deploy</th></tr></thead>
+<tbody>
+$rowsHtml
+</tbody></table></div></body></html>
+"@
+	}
+
+	function New-AccessDeniedPageHtml {
+		param([string]$LogonName, [string]$RequiredRole)
+		$enc      = [System.Net.WebUtility]
+		$roleNote = if ($RequiredRole) {
+			"<p>Access requires the SCCM role: <strong>$($enc::HtmlEncode($RequiredRole))</strong></p>"
+		} else {
+			'<p>Access requires SCCM Administrative User permissions.</p>'
+		}
+		return @"
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>CMPackager - Access Denied</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f3f2f1;color:#323130;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#fff;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:40px 48px;max-width:480px;text-align:center}
+h1{font-size:22px;color:#a4262c;margin-bottom:12px}
+p{color:#605e5c;margin-bottom:8px;font-size:14px}
+.acct{font-family:'Cascadia Code',Consolas,monospace;background:#f3f2f1;padding:4px 10px;border-radius:4px;display:inline-block;margin-top:8px}
+</style></head>
+<body>
+<div class="card">
+<h1>Access Denied</h1>
+$roleNote
+<p>Signed in as:</p>
+<span class="acct">$($enc::HtmlEncode($LogonName))</span>
+</div></body></html>
+"@
+	}
+
+	function New-ErrorPageHtml {
+		param([int]$StatusCode, [string]$Message)
+		$enc = [System.Net.WebUtility]
+		return @"
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>CMPackager - $StatusCode</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f3f2f1;color:#323130;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#fff;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:40px 48px;max-width:480px;text-align:center}
+h1{font-size:48px;font-weight:700;color:#0078d4;margin-bottom:8px}
+p{color:#605e5c;font-size:14px}
+</style></head>
+<body>
+<div class="card"><h1>$StatusCode</h1><p>$($enc::HtmlEncode($Message))</p></div>
+</body></html>
+"@
+	}
+
+	function Send-WebResponse {
+		param($Response, [int]$StatusCode, [string]$Body)
+		$bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
+		$Response.StatusCode      = $StatusCode
+		$Response.ContentType     = 'text/html; charset=utf-8'
+		$Response.ContentLength64 = $bytes.Length
+		$Response.OutputStream.Write($bytes, 0, $bytes.Length)
+		$Response.OutputStream.Close()
+	}
+
+	function Invoke-WebServerRequest {
+		param($Context, [string]$RecipesFolder)
+		$req      = $Context.Request
+		$resp     = $Context.Response
+		$identity = $Context.User.Identity
+
+		$logonName = if ($identity -and $identity.Name) { $identity.Name } else { '(unknown)' }
+		Add-LogContent "WebServer: $($req.HttpMethod) $($req.Url.LocalPath) from $($req.RemoteEndPoint) user=$logonName"
+
+		$isAdmin = Test-SCCMAdminAccess -LogonName $logonName
+		if ($isAdmin -ne $true) {
+			$body = New-AccessDeniedPageHtml -LogonName $logonName -RequiredRole $Global:WebServerRequiredRole
+			Send-WebResponse -Response $resp -StatusCode 403 -Body $body
+			return
+		}
+
+		$path = $req.Url.LocalPath.TrimEnd('/')
+		if ($path -eq '' -or $path -eq '/') {
+			try {
+				$body = New-RecipesPageHtml -RecipesFolder $RecipesFolder
+				Send-WebResponse -Response $resp -StatusCode 200 -Body $body
+			} catch {
+				Add-LogContent "WebServer: error building recipes page - $($_.Exception.Message)"
+				$body = New-ErrorPageHtml -StatusCode 503 -Message 'Failed to load recipe data.'
+				Send-WebResponse -Response $resp -StatusCode 503 -Body $body
+			}
+		} else {
+			$body = New-ErrorPageHtml -StatusCode 404 -Message 'Page not found.'
+			Send-WebResponse -Response $resp -StatusCode 404 -Body $body
+		}
+	}
+
 	function Start-CMPackagerWebServer {
-		throw 'Webserver support is not yet implemented.'
+		$port          = if ($Global:WebServerPort -and [int]::TryParse($Global:WebServerPort, [ref]([ref]0).Value)) { [int]$Global:WebServerPort } else { 8080 }
+		$recipesFolder = Join-Path $PSScriptRoot 'Recipes'
+
+		$prefixes = Get-WebServerPrefixes -Port $port
+		Register-WebServerUrlAcl -Port $port
+
+		$listener = New-Object System.Net.HttpListener
+		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate
+
+		foreach ($p in $prefixes) {
+			$listener.Prefixes.Add($p)
+			Write-Host "Listening on $p" -ForegroundColor Cyan
+		}
+
+		try {
+			$listener.Start()
+			Write-Host "CMPackager web server started. Press Ctrl+C to stop." -ForegroundColor Green
+			Add-LogContent "WebServer started on port $port"
+
+			while ($listener.IsListening) {
+				$context = $null
+				try {
+					$context = $listener.GetContext()
+				} catch [System.Net.HttpListenerException] {
+					break
+				}
+				if ($null -eq $context) { continue }
+				try {
+					Invoke-WebServerRequest -Context $context -RecipesFolder $recipesFolder
+				} catch {
+					Add-LogContent "WebServer: unhandled request error - $($_.Exception.Message)"
+					try {
+						$errBody = New-ErrorPageHtml -StatusCode 503 -Message 'Internal server error.'
+						Send-WebResponse -Response $context.Response -StatusCode 503 -Body $errBody
+					} catch {}
+				}
+			}
+		} catch {
+			Add-LogContent "WebServer: fatal error - $($_.Exception.Message)"
+			Write-Host "WebServer error: $($_.Exception.Message)" -ForegroundColor Red
+		} finally {
+			if ($listener.IsListening) { $listener.Stop() }
+			$listener.Close()
+			Add-LogContent "WebServer stopped."
+			Write-Host "CMPackager web server stopped." -ForegroundColor Yellow
+		}
 	}
 
 	function Test-GitHubApiAccess {
