@@ -655,11 +655,14 @@ function Get-InstallerURLfromWinget {
 				try {
 					Invoke-Expression $PrefetchScript | Out-Null
 				} catch {
+					$errMsg = $_.Exception.Message
 					Add-LogContent "ERROR: PrefetchScript failed for $($ApplicationName)"
-					Add-LogContent "ERROR: $($_.Exception.Message)"
+					Add-LogContent "ERROR: $errMsg"
+					Write-Output "ERROR: PrefetchScript failed for $($ApplicationName)"
+					Write-Output $errMsg
 					if ($Global:NotifyOnDownloadFailure) {
 						$Global:SendEmail = $true; $Global:SendEmail | Out-Null
-						$Global:EmailBody += "   - PrefetchScript failed for $($ApplicationName): $($_.Exception.Message)`n"
+						$Global:EmailBody += "   - PrefetchScript failed for $($ApplicationName): $errMsg`n"
 					}
 					continue
 				}
