@@ -23,6 +23,7 @@
 [CmdletBinding()]
 param (
 	[switch]$Setup = $false,
+	[switch]$WebServer = $false,
 
 	[ValidateScript({
 		if (-not ($_ | Resolve-Path | Test-Path -PathType Leaf)) {
@@ -124,27 +125,6 @@ process {
 	}
 
 	$Global:ConfigMgrConnection = $false
-	$Global:XMLtoDisplayHash = @{"TempDir" = "WPFtextBoxWorkingDir";
-		"ContentLocationRoot"                 = "WPFtextBoxContentRoot";
-		"IconRepo"                            = "WPFtextBoxIconRepository";
-		"CMSite"                              = "WPFtextBoxSiteCode";
-		"SiteServer"                          = "WPFtextBoxSiteServer";
-		"NoVersionInSWCenter"                 = "WPFtoggleButtonNoDisplayAppVer";
-		"EmailTo"                             = "WPFtextBoxEmailTo";
-		"EmailFrom"                           = "WPFtextBoxEmailFrom";
-		"EmailServer"                         = "WPFtextBoxEmailServer";
-		"SendEmailPreference"                 = "WPFtoggleButtonSendEmail";
-		"NotifyOnDownloadFailure"             = "WPFtoggleButtonNotifyOnFailure";
-		"PreferredDistributionLoc"            = "WPFcomboBoxPreferredDistPoint";
-		"PreferredDeployCollection"           = "WPFcomboBoxPreferredDeployColl"
-	}
-		 
-	if (Test-Path $PreferenceFile -ErrorAction SilentlyContinue) {
-		$CMPackagerXML = [XML](Get-Content $PreferenceFile)
-	}
-	else {
-		$CMPackagerXML = [XML](Get-Content "$PSScriptRoot\CMPackager.prefs.template")
-	}
 
 	$Global:OperatorsLookup = @{ And = 'And'; Or = 'Or'; Other = 'Other'; IsEquals = 'Equals'; NotEquals = 'Not equal to'; GreaterThan = 'Greater than'; LessThan = 'Less than'; Between = 'Between'; NotBetween = 'Not Between'; GreaterEquals = 'Greater than or equal to'; LessEquals = 'Less than or equal to'; BeginsWith = 'Begins with'; NotBeginsWith = 'Does not begin with'; EndsWith = 'Ends with'; NotEndsWith = 'Does not end with'; Contains = 'Contains'; NotContains = 'Does not contain'; AllOf = 'All of'; OneOf = 'OneOf'; NoneOf = 'NoneOf'; SetEquals = 'Set equals'; SubsetOf = 'Subset of'; ExcludesAll = 'Exludes all' }
 	## Functions
@@ -2013,232 +1993,296 @@ function Get-InstallerURLfromWinget {
 		}
 	}
 
-	Function Start-OpenFolderDialog {
-		[CmdletBinding()]
-		param (
-			[Parameter()]
-			[String]
-			$OpenFolderWindowTitle,
-			[Parameter()]
-			[String]
-			$InitialDirectory
+	function Test-SetupInputs {
+		param([hashtable]$Settings)
+		$e = New-Object System.Collections.ArrayList
+		if ([string]::IsNullOrWhiteSpace($Settings.TempDir))             { [void]$e.Add('Working Directory is required.') }
+		if ([string]::IsNullOrWhiteSpace($Settings.ContentLocationRoot)) { [void]$e.Add('Content Root is required.') }
+		if ($Settings.CMSite -notmatch '^[A-Z0-9]{3}:?$')               { [void]$e.Add("Site Code must be 3 uppercase alphanumeric characters, optionally followed by ':'.") }
+		if ([string]::IsNullOrWhiteSpace($Settings.SiteServer))          { [void]$e.Add('Site Server is required.') }
+		if ($Settings.SendEmailPreference -eq 'True') {
+			if ([string]::IsNullOrWhiteSpace($Settings.EmailTo)   -or $Settings.EmailTo   -notmatch '@') { [void]$e.Add('Email To must be a valid email address.') }
+			if ([string]::IsNullOrWhiteSpace($Settings.EmailFrom) -or $Settings.EmailFrom -notmatch '@') { [void]$e.Add('Email From must be a valid email address.') }
+			if ([string]::IsNullOrWhiteSpace($Settings.EmailServer))                                     { [void]$e.Add('SMTP Server is required when email reports are enabled.') }
+		}
+		return ,$e
+	}
+
+	function Save-SetupPrefs {
+		param([hashtable]$Settings, [string]$PreferenceFile, [string]$TemplatePath)
+		if (Test-Path $PreferenceFile -ErrorAction SilentlyContinue) {
+			[xml]$xml = Get-Content $PreferenceFile
+		} else {
+			[xml]$xml = Get-Content $TemplatePath
+		}
+		foreach ($key in $Settings.Keys) {
+			$xml.PackagerPrefs.$key = [string]$Settings[$key]
+		}
+		$xml.PackagerPrefs.LogPath = "$(Split-Path $Settings.TempDir -Parent)\CMPackager.log"
+		$parentDir = Split-Path $PreferenceFile -Parent
+		if ($parentDir -and -not (Test-Path $parentDir -ErrorAction SilentlyContinue)) {
+			New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+		}
+		$xml.Save($PreferenceFile)
+	}
+
+	function Invoke-InteractiveSetup {
+		param([hashtable]$Defaults)
+
+		function prompt-field {
+			param([string]$label, [string]$default, [scriptblock]$validate, [string]$errMsg, [switch]$optional)
+			do {
+				$hint   = if ($default) { " [$default]" } else { '' }
+				$answer = Read-Host "$label$hint"
+				if ([string]::IsNullOrWhiteSpace($answer)) { $answer = $default }
+				if ($optional -and [string]::IsNullOrWhiteSpace($answer)) { return $answer }
+				if ($validate -and -not (& $validate $answer)) {
+					Write-Host "  $errMsg" -ForegroundColor Red
+					$answer = $null
+				}
+			} while ([string]::IsNullOrWhiteSpace($answer))
+			return $answer
+		}
+
+		function prompt-bool {
+			param([string]$label, [bool]$default)
+			$hint   = if ($default) { '[Y/n]' } else { '[y/N]' }
+			$answer = Read-Host "$label $hint"
+			if ([string]::IsNullOrWhiteSpace($answer)) { return $default }
+			return $answer -match '^[yY]'
+		}
+
+		$s = @{}
+		Write-Host ''
+		Write-Host '=== CMPackager Setup Wizard ===' -ForegroundColor Cyan
+		Write-Host ''
+		Write-Host '-- Required Settings --' -ForegroundColor Yellow
+		$s.TempDir             = prompt-field 'Working Directory'             $Defaults.TempDir             { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
+		$s.ContentLocationRoot = prompt-field 'Content Root'                  $Defaults.ContentLocationRoot { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
+		$s.CMSite              = (prompt-field 'Site Code (e.g. PS1 or PS1:)' $Defaults.CMSite              { param($v) $v.ToUpper() -match '^[A-Z0-9]{3}:?$' } "Must be 3 uppercase alphanumeric characters, optionally followed by ':'.").ToUpper()
+		$s.SiteServer          = prompt-field 'Site Server FQDN'              $Defaults.SiteServer          { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
+		Write-Host ''
+		Write-Host '-- Optional Settings --' -ForegroundColor Yellow
+		$s.IconRepo            = prompt-field 'Icon Repository (leave blank to skip)' $Defaults.IconRepo -optional
+		$s.NoVersionInSWCenter = (prompt-bool 'Hide version in Software Center display names?' ($Defaults.NoVersionInSWCenter -eq 'True')).ToString()
+		Write-Host ''
+		Write-Host '-- Email Reporting --' -ForegroundColor Yellow
+		$sendEmail             = prompt-bool 'Enable email reports?' ($Defaults.SendEmailPreference -eq 'True')
+		$s.SendEmailPreference = $sendEmail.ToString()
+		if ($sendEmail) {
+			$s.EmailTo                 = prompt-field 'Email To'    $Defaults.EmailTo     { param($v) $v -match '@' } 'Must contain @.'
+			$s.EmailFrom               = prompt-field 'Email From'  $Defaults.EmailFrom   { param($v) $v -match '@' } 'Must contain @.'
+			$s.EmailServer             = prompt-field 'SMTP Server' $Defaults.EmailServer { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
+			$s.NotifyOnDownloadFailure = (prompt-bool 'Notify on download failure?' ($Defaults.NotifyOnDownloadFailure -eq 'True')).ToString()
+		} else {
+			$s.EmailTo                 = $Defaults.EmailTo
+			$s.EmailFrom               = $Defaults.EmailFrom
+			$s.EmailServer             = $Defaults.EmailServer
+			$s.NotifyOnDownloadFailure = $Defaults.NotifyOnDownloadFailure
+		}
+		Write-Host ''
+		Write-Host '-- SCCM Defaults (optional) --' -ForegroundColor Yellow
+		$s.PreferredDistributionLoc  = prompt-field 'Preferred Distribution Point Group' $Defaults.PreferredDistributionLoc  -optional
+		$s.PreferredDeployCollection = prompt-field 'Preferred Deployment Collection'    $Defaults.PreferredDeployCollection -optional
+		$s.ContentFolderPattern      = $Defaults.ContentFolderPattern
+		$s.CMPSModulePath            = $Defaults.CMPSModulePath
+		$s.GitHubToken               = $Defaults.GitHubToken
+
+		Write-Host ''
+		Write-Host '-- Review --' -ForegroundColor Yellow
+		$reviewItems = [ordered]@{
+			'Working Directory'         = $s.TempDir
+			'Content Root'              = $s.ContentLocationRoot
+			'Site Code'                 = $s.CMSite
+			'Site Server'               = $s.SiteServer
+			'Icon Repository'           = if ($s.IconRepo) { $s.IconRepo } else { '(empty)' }
+			'Hide Version in SW Center' = $s.NoVersionInSWCenter
+			'Email Reports'             = $s.SendEmailPreference
+			'Email To'                  = if ($s.EmailTo) { $s.EmailTo } else { '(empty)' }
+			'Email From'                = if ($s.EmailFrom) { $s.EmailFrom } else { '(empty)' }
+			'SMTP Server'               = if ($s.EmailServer) { $s.EmailServer } else { '(empty)' }
+			'Notify on Failure'         = $s.NotifyOnDownloadFailure
+			'Distribution Point Group'  = if ($s.PreferredDistributionLoc) { $s.PreferredDistributionLoc } else { '(empty)' }
+			'Deployment Collection'     = if ($s.PreferredDeployCollection) { $s.PreferredDeployCollection } else { '(empty)' }
+		}
+		foreach ($pair in $reviewItems.GetEnumerator()) {
+			Write-Host ("  {0,-30} {1}" -f "$($pair.Key):", $pair.Value)
+		}
+		Write-Host ''
+		$confirm = Read-Host 'Save these settings? [Y/n]'
+		if ($confirm -match '^[nN]') { return $null }
+		return $s
+	}
+
+	function Invoke-SpectreSetup {
+		param([hashtable]$Defaults)
+
+		function read-required {
+			param([string]$prompt, [string]$default, [scriptblock]$validate, [string]$errMsg)
+			do {
+				$val = Read-SpectreText -Message $prompt -DefaultAnswer $default
+				if ([string]::IsNullOrWhiteSpace($val)) { $val = $default }
+				if ($validate -and -not (& $validate $val)) {
+					Write-Host "  $errMsg" -ForegroundColor Red
+					$val = $null
+				}
+			} while ([string]::IsNullOrWhiteSpace($val))
+			return $val
+		}
+
+		$s = @{}
+
+		Write-SpectreRule -Title 'CMPackager Setup Wizard' -Color 'Blue'
+		Write-Host ''
+
+		Write-SpectreRule -Title 'Required Settings' -Color 'Grey'
+		$s.TempDir             = read-required 'Working Directory'              $Defaults.TempDir             { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
+		$s.ContentLocationRoot = read-required 'Content Root'                   $Defaults.ContentLocationRoot { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
+		$s.CMSite              = (read-required 'Site Code (e.g. PS1 or PS1:)' $Defaults.CMSite              { param($v) $v.ToUpper() -match '^[A-Z0-9]{3}:?$' } "Must be 3 uppercase alphanumeric characters, optionally followed by ':'.").ToUpper()
+		$s.SiteServer          = read-required 'Site Server FQDN'               $Defaults.SiteServer          { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
+
+		Write-Host ''
+		Write-SpectreRule -Title 'Optional Settings' -Color 'Grey'
+		$s.IconRepo            = Read-SpectreText    -Message 'Icon Repository (leave blank to skip)' -DefaultAnswer $Defaults.IconRepo -AllowEmpty
+		$noVersion             = Read-SpectreConfirm -Message 'Hide version in Software Center display names?' -DefaultAnswer (if ($Defaults.NoVersionInSWCenter -eq 'True') { 'y' } else { 'n' })
+		$s.NoVersionInSWCenter = $noVersion.ToString()
+
+		Write-Host ''
+		Write-SpectreRule -Title 'Email Reporting' -Color 'Grey'
+		$sendEmail             = Read-SpectreConfirm -Message 'Enable email reports?' -DefaultAnswer (if ($Defaults.SendEmailPreference -eq 'True') { 'y' } else { 'n' })
+		$s.SendEmailPreference = $sendEmail.ToString()
+		if ($sendEmail) {
+			$s.EmailTo                 = read-required 'Email To'    $Defaults.EmailTo     { param($v) $v -match '@' } 'Must contain @.'
+			$s.EmailFrom               = read-required 'Email From'  $Defaults.EmailFrom   { param($v) $v -match '@' } 'Must contain @.'
+			$s.EmailServer             = read-required 'SMTP Server' $Defaults.EmailServer { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
+			$notifyFail                = Read-SpectreConfirm -Message 'Notify on download failure?' -DefaultAnswer (if ($Defaults.NotifyOnDownloadFailure -eq 'True') { 'y' } else { 'n' })
+			$s.NotifyOnDownloadFailure = $notifyFail.ToString()
+		} else {
+			$s.EmailTo                 = $Defaults.EmailTo
+			$s.EmailFrom               = $Defaults.EmailFrom
+			$s.EmailServer             = $Defaults.EmailServer
+			$s.NotifyOnDownloadFailure = $Defaults.NotifyOnDownloadFailure
+		}
+
+		Write-Host ''
+		Write-SpectreRule -Title 'SCCM Defaults (optional)' -Color 'Grey'
+		$s.PreferredDistributionLoc  = Read-SpectreText -Message 'Preferred Distribution Point Group' -DefaultAnswer $Defaults.PreferredDistributionLoc  -AllowEmpty
+		$s.PreferredDeployCollection = Read-SpectreText -Message 'Preferred Deployment Collection'    -DefaultAnswer $Defaults.PreferredDeployCollection -AllowEmpty
+		$s.ContentFolderPattern      = $Defaults.ContentFolderPattern
+		$s.CMPSModulePath            = $Defaults.CMPSModulePath
+		$s.GitHubToken               = $Defaults.GitHubToken
+
+		Write-Host ''
+		Write-SpectreRule -Title 'Review' -Color 'Grey'
+		$tableData = @(
+			[pscustomobject]@{ Setting = 'Working Directory';         Value = $s.TempDir }
+			[pscustomobject]@{ Setting = 'Content Root';              Value = $s.ContentLocationRoot }
+			[pscustomobject]@{ Setting = 'Site Code';                 Value = $s.CMSite }
+			[pscustomobject]@{ Setting = 'Site Server';               Value = $s.SiteServer }
+			[pscustomobject]@{ Setting = 'Icon Repository';           Value = if ($s.IconRepo) { $s.IconRepo } else { '(empty)' } }
+			[pscustomobject]@{ Setting = 'Hide Version in SW Center'; Value = $s.NoVersionInSWCenter }
+			[pscustomobject]@{ Setting = 'Email Reports';             Value = $s.SendEmailPreference }
+			[pscustomobject]@{ Setting = 'Email To';                  Value = if ($s.EmailTo) { $s.EmailTo } else { '(empty)' } }
+			[pscustomobject]@{ Setting = 'Email From';                Value = if ($s.EmailFrom) { $s.EmailFrom } else { '(empty)' } }
+			[pscustomobject]@{ Setting = 'SMTP Server';               Value = if ($s.EmailServer) { $s.EmailServer } else { '(empty)' } }
+			[pscustomobject]@{ Setting = 'Notify on Failure';         Value = $s.NotifyOnDownloadFailure }
+			[pscustomobject]@{ Setting = 'Distribution Point Group';  Value = if ($s.PreferredDistributionLoc) { $s.PreferredDistributionLoc } else { '(empty)' } }
+			[pscustomobject]@{ Setting = 'Deployment Collection';     Value = if ($s.PreferredDeployCollection) { $s.PreferredDeployCollection } else { '(empty)' } }
 		)
-		# Code from https://gist.github.com/IMJLA/1d570aa2bb5c30215c222e7a5e5078fd
-		$AssemblyFullName = 'System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089'
-		$Assembly = [System.Reflection.Assembly]::Load($AssemblyFullName)
-		$OpenFileDialog = [System.Windows.Forms.OpenFileDialog]::new()
-		$OpenFileDialog.AddExtension = $false
-		$OpenFileDialog.CheckFileExists = $false
-		$OpenFileDialog.DereferenceLinks = $true
-		if ((-not ([System.String]::IsNullOrEmpty($InitialDirectory))) -and (Test-Path $InitialDirectory -IsValid -ErrorAction SilentlyContinue)) {
-			$OpenFileDialog.InitialDirectory = $InitialDirectory
-		}
-		$OpenFileDialog.Filter = "Folders|`n"
-		$OpenFileDialog.Multiselect = $false
-		if ([System.String]::IsNullOrEmpty($OpenFolderWindowTitle)) {
-			$OpenFileDialog.Title = "Select folder"
-		}
-		else {
-			$OpenFileDialog.Title = $OpenFolderWindowTitle
-		}
-		$OpenFileDialogType = $OpenFileDialog.GetType()
-		$FileDialogInterfaceType = $Assembly.GetType('System.Windows.Forms.FileDialogNative+IFileDialog')
-		$IFileDialog = $OpenFileDialogType.GetMethod('CreateVistaDialog', @('NonPublic', 'Public', 'Static', 'Instance')).Invoke($OpenFileDialog, $null)
-		$null = $OpenFileDialogType.GetMethod('OnBeforeVistaDialog', @('NonPublic', 'Public', 'Static', 'Instance')).Invoke($OpenFileDialog, $IFileDialog)
-		[uint32]$PickFoldersOption = $Assembly.GetType('System.Windows.Forms.FileDialogNative+FOS').GetField('FOS_PICKFOLDERS').GetValue($null)
-		$FolderOptions = $OpenFileDialogType.GetMethod('get_Options', @('NonPublic', 'Public', 'Static', 'Instance')).Invoke($OpenFileDialog, $null) -bor $PickFoldersOption
-		$null = $FileDialogInterfaceType.GetMethod('SetOptions', @('NonPublic', 'Public', 'Static', 'Instance')).Invoke($IFileDialog, $FolderOptions)
-		$VistaDialogEvent = [System.Activator]::CreateInstance($AssemblyFullName, 'System.Windows.Forms.FileDialog+VistaDialogEvents', $false, 0, $null, $OpenFileDialog, $null, $null).Unwrap()
-		[uint32]$AdviceCookie = 0
-		$AdvisoryParameters = @($VistaDialogEvent, $AdviceCookie)
-		$AdviseResult = $FileDialogInterfaceType.GetMethod('Advise', @('NonPublic', 'Public', 'Static', 'Instance')).Invoke($IFileDialog, $AdvisoryParameters)
-		$AdviceCookie = $AdvisoryParameters[1]
-		$Result = $FileDialogInterfaceType.GetMethod('Show', @('NonPublic', 'Public', 'Static', 'Instance')).Invoke($IFileDialog, [System.IntPtr]::Zero)
-		$null = $FileDialogInterfaceType.GetMethod('Unadvise', @('NonPublic', 'Public', 'Static', 'Instance')).Invoke($IFileDialog, $AdviceCookie)
-		if ($Result -eq [System.Windows.Forms.DialogResult]::OK) {
-			$FileDialogInterfaceType.GetMethod('GetResult', @('NonPublic', 'Public', 'Static', 'Instance')).Invoke($IFileDialog, $null)
-		}
-		Write-Output $OpenFileDialog.FileName
-	}
-	Function Test-GUItestConnectButton {
-		if ((($WPFtextBoxSiteCode.Text -like "???") -or ($WPFtextBoxSiteCode.Text -like "???:")) -and (-not ([System.String]::IsNullOrEmpty($WPFtextBoxSiteServer.Text)))) {
-			$WPFbuttonConnect.IsEnabled = $true
-		}
-		else {
-			$WPFbuttonConnect.IsEnabled = $false
-		}	
+		Format-SpectreTable -Data $tableData -Color 'Grey'
+
+		$save = Read-SpectreConfirm -Message 'Save these settings?' -DefaultAnswer 'y'
+		if (-not $save) { return $null }
+		return $s
 	}
 
-	Function Test-SendEmailtoggleButton {
-		$EmailValue = [bool]($WPFtoggleButtonSendEmail.IsChecked)
-		$WPFtoggleButtonNotifyOnFailure.IsEnabled = $EmailValue
-		$WPFlabelEmailFrom.IsEnabled = $EmailValue
-		$WPFlabelEmailTo.IsEnabled = $EmailValue
-		$WPFlabelEmailServer.IsEnabled = $EmailValue
-		$WPFtextBoxEmailTo.IsEnabled = $EmailValue
-		$WPFtextBoxEmailFrom.IsEnabled = $EmailValue
-		$WPFtextBoxEmailServer.IsEnabled = $EmailValue
+	function Invoke-Setup {
+		param([string]$PreferenceFile)
+
+		if (Test-Path $PreferenceFile -ErrorAction SilentlyContinue) {
+			[xml]$xml = Get-Content $PreferenceFile
+		} else {
+			[xml]$xml = Get-Content "$PSScriptRoot\CMPackager.prefs.template"
+		}
+		$defaults = @{
+			TempDir                   = $xml.PackagerPrefs.TempDir
+			ContentLocationRoot       = $xml.PackagerPrefs.ContentLocationRoot
+			IconRepo                  = $xml.PackagerPrefs.IconRepo
+			CMSite                    = $xml.PackagerPrefs.CMSite
+			SiteServer                = $xml.PackagerPrefs.SiteServer
+			NoVersionInSWCenter       = $xml.PackagerPrefs.NoVersionInSWCenter
+			EmailTo                   = $xml.PackagerPrefs.EmailTo
+			EmailFrom                 = $xml.PackagerPrefs.EmailFrom
+			EmailServer               = $xml.PackagerPrefs.EmailServer
+			SendEmailPreference       = $xml.PackagerPrefs.SendEmailPreference
+			NotifyOnDownloadFailure   = $xml.PackagerPrefs.NotifyOnDownloadFailure
+			PreferredDistributionLoc  = $xml.PackagerPrefs.PreferredDistributionLoc
+			PreferredDeployCollection = $xml.PackagerPrefs.PreferredDeployCollection
+			ContentFolderPattern      = $xml.PackagerPrefs.ContentFolderPattern
+			CMPSModulePath            = $xml.PackagerPrefs.CMPSModulePath
+			GitHubToken               = $xml.PackagerPrefs.GitHubToken
+		}
+
+		$useSpectre = $false
+		if (Get-Module -ListAvailable -Name PwshSpectreConsole -ErrorAction SilentlyContinue) {
+			try {
+				Import-Module PwshSpectreConsole -ErrorAction Stop
+				$useSpectre = $true
+			} catch {
+				Write-Host "Failed to import PwshSpectreConsole ($_). Falling back to interactive prompts." -ForegroundColor Yellow
+			}
+		} else {
+			Write-Host ''
+			Write-Host 'PwshSpectreConsole is not installed. It provides a nicer setup experience.'
+			$answer = Read-Host 'Install it now? (requires internet access) [y/N]'
+			if ($answer -match '^[yY]') {
+				try {
+					Install-Module PwshSpectreConsole -Scope CurrentUser -Force -ErrorAction Stop
+					Import-Module PwshSpectreConsole -ErrorAction Stop
+					$useSpectre = $true
+				} catch {
+					Write-Host "Installation failed ($_). Falling back to interactive prompts." -ForegroundColor Yellow
+				}
+			}
+		}
+
+		$settings = if ($useSpectre) {
+			Invoke-SpectreSetup -Defaults $defaults
+		} else {
+			Invoke-InteractiveSetup -Defaults $defaults
+		}
+
+		if ($null -eq $settings) {
+			Write-Host 'Setup cancelled. No changes were saved.' -ForegroundColor Yellow
+			return
+		}
+
+		$errors = Test-SetupInputs -Settings $settings
+		if ($errors.Count -gt 0) {
+			Write-Host ''
+			Write-Host 'Cannot save — validation errors:' -ForegroundColor Red
+			foreach ($e in $errors) { Write-Host "  - $e" -ForegroundColor Red }
+			return
+		}
+
+		Save-SetupPrefs -Settings $settings -PreferenceFile $PreferenceFile -TemplatePath "$PSScriptRoot\CMPackager.prefs.template"
+		Write-Host ''
+		Write-Host "Configuration saved to $PreferenceFile" -ForegroundColor Green
 	}
 
-	Function Update-GUI {
-		# Connection
-		if ((($WPFtextBoxSiteCode.Text -like "???") -or ($WPFtextBoxSiteCode.Text -like "???:")) -and (-not ([System.String]::IsNullOrEmpty($WPFtextBoxSiteServer.Text)))) {
-			$WPFbuttonConnect.IsEnabled = $true
-		}
-		else {
-			$WPFbuttonConnect.IsEnabled = $false
-		}	
-
-		# Collection Query
-		if ($WPFButtonConnect.IsEnabled -and $Global:ConfigMgrConnection) {
-			$WPFbuttonQueryCols.IsEnabled = $true
-		}
-		else {
-			$WPFbuttonQueryCols.IsEnabled = $false
-		}
-
-		# Email Toggle
-		$EmailValue = [bool]($WPFtoggleButtonSendEmail.IsChecked)
-		$WPFtoggleButtonNotifyOnFailure.IsEnabled = $EmailValue
-		$WPFlabelEmailFrom.IsEnabled = $EmailValue
-		$WPFlabelEmailTo.IsEnabled = $EmailValue
-		$WPFlabelEmailServer.IsEnabled = $EmailValue
-		$WPFtextBoxEmailTo.IsEnabled = $EmailValue
-		$WPFtextBoxEmailFrom.IsEnabled = $EmailValue
-		$WPFtextBoxEmailServer.IsEnabled = $EmailValue
+	function Start-CMPackagerWebServer {
+		throw 'Webserver support is not yet implemented.'
 	}
 
 	################################### MAIN ########################################
 	## Startup
 	if ($Setup) {
-		$inputXML = Get-Content "$PSScriptRoot\ExtraFiles\Scripts\CMPackagerSetup.xaml" -Raw
-		$inputXML = $inputXML -replace 'mc:Ignorable="d"', '' -replace "x:N", 'N' -replace '^<Win.*', '<Window'
-		[void][System.Reflection.Assembly]::LoadWithPartialName('presentationframework')
-		[xml]$XAML = $inputXML
-		#Read XAML
- 
-		$reader = (New-Object System.Xml.XmlNodeReader $xaml)
-		try {
-			$Form = [Windows.Markup.XamlReader]::Load( $reader )
-		}
-		catch {
-			Write-Warning "Unable to parse XML, with error: $($Error[0])`n Ensure that there are NO SelectionChanged or TextChanged properties in your textboxes (PowerShell cannot process them)"
-			throw
-		}
- 
-		#===========================================================================
-		# Load XAML Objects In PowerShell
-		#===========================================================================
-  
-		$xaml.SelectNodes("//*[@Name]") | ForEach-Object { #"trying item $($_.Name)";
-			try { Set-Variable -Name "WPF$($_.Name)" -Value $Form.FindName($_.Name) -ErrorAction Stop }
-			catch { throw }
-		}
+		Invoke-Setup -PreferenceFile $PreferenceFile
+		exit
+	}
 
-		$WPFtoggleButtonSendEmail.Add_Click( {
-				Update-GUI
-			})
-
-		$WPFtextBoxSiteCode.Add_LostFocus( {
-				Update-GUI
-			})
-
-		$WPFtextBoxSiteCode.Add_TextChanged( {
-				Update-GUI
-			})
-
-		$WPFtextBoxSiteServer.Add_TextChanged( {
-				Update-GUI
-			})
-
-		$WPFbuttonQueryCols.Add_Click( {
-				$form.Cursor = "Wait"
-				Connect-ConfigMgr
-				Push-Location
-				Set-Location $Global:CMSite
-				(Get-CMDeviceCollection -Name "$($WPFcomboBoxPreferredDeployColl.Text)*") | ForEach-Object { $WPFcomboBoxPreferredDeployColl.Items.Add($_.Name) }
-				Pop-Location
-				$form.Cursor = "Arrow"
-			})
-
-		$WPFbuttonConnect.Add_Click( {
-				$Global:SiteCode = ($WPFtextBoxSiteCode.Text).replace(":", "")
-				$Global:CMSite = "$($Global:SiteCode):"
-				$Global:SiteServer = $WPFtextBoxSiteServer.Text
-				$Global:SiteServer | Out-Null
-				$form.Cursor = "Wait"
-				Connect-ConfigMgr
-				Push-Location
-				Set-Location $Global:CMSite
-				Get-CMDistributionPointGroup | ForEach-Object { $WPFcomboBoxPreferredDistPoint.Items.Add($_.Name) }
-				Pop-Location
-				$form.Cursor = "Arrow"
-			})
-
-		$WPFbuttonBrowseRoot.Add_Click( {
-				$FileDialogResult = Start-OpenFolderDialog -OpenFolderWindowTitle "Select ConfigMgr Content Root Directory" -InitialDirectory $WPFtextBoxContentRoot.text
-				if (-not ([System.String]::IsNullorEmpty($FileDialogResult))) {
-					$WPFtextBoxContentRoot.text = $FileDialogResult
-				}
-			})
-
-		$WPFbuttonBrowseIcon.Add_Click( {
-				$FileDialogResult = Start-OpenFolderDialog -OpenFolderWindowTitle "Select Icon Repository Directory" -InitialDirectory $WPFtextBoxIconRepository.text
-				if (-not ([System.String]::IsNullorEmpty($FileDialogResult))) {
-					$WPFtextBoxIconRepository.text = $FileDialogResult
-				}
-			})
-
-		$WPFbuttonBrowseWorkDir.Add_Click( {
-				$FileDialogResult = Start-OpenFolderDialog -OpenFolderWindowTitle "Select CMPackager Working Directory" -InitialDirectory $WPFtextBoxWorkingDir.text
-				if (-not ([System.String]::IsNullorEmpty($FileDialogResult))) {
-					$WPFtextBoxWorkingDir.text = $FileDialogResult
-				}
-			})
-
-		$Form.Add_ContentRendered( {
-				foreach ($key in $Global:XMLtoDisplayHash.Keys) {
-					Write-Host $key $XMLtoDisplayHash[$key]
-					$Value = ($CMPackagerXML.PackagerPrefs.$key)
-					$DisplayVariable = Get-Variable $XMLtoDisplayHash[$key] -ValueOnly
-					switch -wildcard ($XMLtoDisplayHash[$key]) {
-						*toggleButton* {
-							$DisplayVariable.IsChecked = [System.Convert]::ToBoolean($Value)
-						}
-						Default {
-							$DisplayVariable.Text = $Value
-						}
-					}
-				}
-
-				$FoundSiteCode = (New-Object -ComObject Microsoft.SMS.Client -Strict -ErrorAction SilentlyContinue).GetAssignedSite()
-				if (-not [System.String]::IsNullOrEmpty($FoundSiteCode)) {
-					$WPFtextBoxSiteCode.Text = $FoundSiteCode
-				}
-				Update-GUI
-			})
-
-		$WPFbuttonSave.Add_Click( {
-				$form.Cursor = "Wait"
-				foreach ($key in $Global:XMLtoDisplayHash.Keys) {
-					$DisplayVariable = Get-Variable $XMLtoDisplayHash[$key] -ValueOnly
-					switch -wildcard ($XMLtoDisplayHash[$key]) {
-						*toggleButton* {
-							$Value = ($DisplayVariable.IsChecked).ToString()
-						}
-						Default {
-							$Value = $DisplayVariable.Text
-						}
-					}
-					$CMPackagerXML.PackagerPrefs.$key = [String]$Value
-					Update-GUI
-				}
-				$CMPackagerXML.PackagerPrefs.LogPath = "$(Split-Path $WPFtextBoxWorkingDir.Text -Parent)\CMPackager.log"
-				$CMPackagerXML.Save($PreferenceFile)
-				$form.Cursor = "Arrow"
-			})
-
-		$Form.ShowDialog() | Out-Null
+	if ($WebServer) {
+		Start-CMPackagerWebServer
 		exit
 	}
 
