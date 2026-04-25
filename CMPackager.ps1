@@ -453,7 +453,19 @@ function Get-InstallerURLfromWinget {
       }
   }
   catch {
-      Write-Error "Error: $($_.Exception.Message)"
+      $statusCode = $null
+      if ($_.Exception.Response) {
+          $statusCode = [int]$_.Exception.Response.StatusCode
+      } elseif ($_.Exception -is [Microsoft.PowerShell.Commands.HttpResponseException]) {
+          $statusCode = [int]$_.Exception.StatusCode
+      }
+      if ($statusCode -eq 401) {
+          throw "GitHub API returned 401 Unauthorized. The configured token is invalid or expired.`n  ACTION: Generate a new personal access token at https://github.com/settings/tokens and set it as <GitHubToken> in CMPackager.prefs (or in the GITHUB_TOKEN environment variable)."
+      } elseif ($statusCode -eq 403) {
+          throw "GitHub API returned 403 Forbidden. The anonymous rate limit (60 req/hr) has been reached.`n  ACTION: Add a GitHub personal access token as <GitHubToken> in CMPackager.prefs (or GITHUB_TOKEN env var) to raise the limit to 5,000 req/hr."
+      } else {
+          throw "GitHub API error: $($_.Exception.Message)"
+      }
   }
 }
 
@@ -640,7 +652,17 @@ function Get-InstallerURLfromWinget {
 			$PrefetchScript = $Download.PrefetchScript
 			If (-not ([String]::IsNullOrEmpty($PrefetchScript))) {
 				$ProgressPreference = 'SilentlyContinue'
-				Invoke-Expression $PrefetchScript | Out-Null
+				try {
+					Invoke-Expression $PrefetchScript | Out-Null
+				} catch {
+					Add-LogContent "ERROR: PrefetchScript failed for $($ApplicationName)"
+					Add-LogContent "ERROR: $($_.Exception.Message)"
+					if ($Global:NotifyOnDownloadFailure) {
+						$Global:SendEmail = $true; $Global:SendEmail | Out-Null
+						$Global:EmailBody += "   - PrefetchScript failed for $($ApplicationName): $($_.Exception.Message)`n"
+					}
+					continue
+				}
 			}
 
 			if (-not ([System.String]::IsNullOrEmpty($Download.Version))) {
