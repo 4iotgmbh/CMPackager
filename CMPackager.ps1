@@ -2501,6 +2501,46 @@ $roleNote
 "@
 	}
 
+	function New-AuthRequiredPageHtml {
+		param([string]$ServerHost)
+		$enc      = [System.Net.WebUtility]
+		$safeHost = $enc::HtmlEncode($ServerHost)
+		return @"
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>CMPackager - Sign In</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f3f2f1;color:#323130;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#fff;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:40px 48px;max-width:560px;width:100%}
+h1{font-size:20px;color:#0078d4;margin-bottom:8px}
+.lead{color:#605e5c;font-size:14px;margin-bottom:24px;line-height:1.5}
+h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#605e5c;margin-bottom:8px}
+ol{padding-left:20px;font-size:14px;color:#323130;line-height:1.9;margin-bottom:20px}
+code{font-family:'Cascadia Code',Consolas,monospace;background:#f3f2f1;padding:2px 6px;border-radius:3px;font-size:12px}
+.cmd{background:#1e1e1e;color:#d4d4d4;padding:12px 16px;border-radius:4px;font-family:'Cascadia Code',Consolas,monospace;font-size:12px;margin:8px 0 20px;white-space:pre-wrap;word-break:break-all}
+.reload{display:inline-block;margin-top:4px;color:#0078d4;font-size:14px;text-decoration:none}
+.reload:hover{text-decoration:underline}
+</style></head>
+<body>
+<div class="card">
+<h1>Windows Authentication Required</h1>
+<p class="lead">CMPackager uses Windows Integrated Authentication (NTLM/Kerberos). Edge and Chrome require the server to be explicitly trusted before they send credentials automatically.</p>
+<h2>Option A &mdash; Internet Options (all browsers)</h2>
+<ol>
+<li>Open <code>inetcpl.cpl</code></li>
+<li>Security &rarr; Local intranet &rarr; Sites &rarr; Advanced</li>
+<li>Add <code>http://$safeHost</code> and click OK</li>
+<li>Restart the browser and reload this page</li>
+</ol>
+<h2>Option B &mdash; Registry (run as Administrator)</h2>
+<div class="cmd">reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\$safeHost" /v http /t REG_DWORD /d 1 /f</div>
+<a class="reload" href="javascript:location.reload()">Reload after configuring</a>
+</div>
+</body></html>
+"@
+	}
+
 	function New-ErrorPageHtml {
 		param([int]$StatusCode, [string]$Message)
 		$enc = [System.Net.WebUtility]
@@ -2543,7 +2583,7 @@ p{color:#605e5c;font-size:14px}
 		if (-not $isAuthenticated) {
 			Add-LogContent "WebServer: anonymous request from $($req.RemoteEndPoint) - issuing Negotiate challenge"
 			$resp.AddHeader('WWW-Authenticate', 'Negotiate')
-			$body = New-ErrorPageHtml -StatusCode 401 -Message 'Windows authentication required.'
+			$body = New-AuthRequiredPageHtml -ServerHost $req.Url.Host
 			Send-WebResponse -Response $resp -StatusCode 401 -Body $body
 			return
 		}
@@ -2574,29 +2614,59 @@ p{color:#605e5c;font-size:14px}
 		}
 	}
 
+	function Register-SPNForWebServer {
+		param([string]$Fqdn, [int]$Port)
+		# Kerberos requires an HTTP SPN so the KDC can issue tickets for this service.
+		# Without it the Negotiate handshake falls back to NTLM, which still works but
+		# is slower and does not support delegation.
+		$spn = "HTTP/$Fqdn`:$Port"
+		$existing = & setspn -Q $spn 2>&1 | Out-String
+		if ($existing -match [regex]::Escape($spn)) {
+			Add-LogContent "WebServer: SPN already registered: $spn"
+			return
+		}
+		$account = "$env:USERDOMAIN\$env:COMPUTERNAME$"
+		Add-LogContent "WebServer: registering SPN $spn for $account"
+		$result = & setspn -A $spn $account 2>&1 | Out-String
+		Add-LogContent "WebServer: setspn result - $($result.Trim())"
+		if ($result -match 'Updated object') {
+			Write-Host "  SPN registered: $spn" -ForegroundColor Green
+		} else {
+			Write-Host "  WARNING: SPN registration failed - Kerberos will fall back to NTLM ($($result.Trim()))" -ForegroundColor Yellow
+		}
+	}
+
 	function Start-CMPackagerWebServer {
 		$portRef = [ref]0
 		$port    = if ($Global:WebServerPort -and [int]::TryParse([string]$Global:WebServerPort, $portRef) -and $portRef.Value -ge 1 -and $portRef.Value -le 65535) { $portRef.Value } else { 8080 }
 		$recipesFolder = Join-Path $PSScriptRoot 'Recipes'
 
+		$fqdn = try { [System.Net.Dns]::GetHostEntry('localhost').HostName } catch { $env:COMPUTERNAME }
+
 		$prefixes = Get-WebServerPrefixes -Port $port
 		Register-WebServerUrlAcl -Port $port
+		Register-SPNForWebServer -Fqdn $fqdn -Port $port
 
 		$listener = New-Object System.Net.HttpListener
-		# Allow anonymous so all requests reach GetContext(). Unauthenticated requests are
-		# challenged in Invoke-WebServerRequest by sending 401 + WWW-Authenticate: Negotiate.
-		# Negotiate-only mode relies on HTTP.sys kernel-level auth before queuing, which can
-		# stall GetContext() indefinitely when NTLM/Kerberos negotiation does not complete.
+		# Allow anonymous so all requests reach GetContext(). Unauthenticated requests get a
+		# 401 + WWW-Authenticate: Negotiate challenge from our code. Domain browsers respond
+		# automatically when the URL is in the intranet zone (FQDN access). Negotiate-only
+		# mode makes HTTP.sys handle auth before queuing, which can block GetContext() for
+		# browsers that do not respond to the kernel-level challenge.
 		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate -bor [System.Net.AuthenticationSchemes]::Anonymous
 
-		# Use the strong wildcard prefix (http://+:port/) so HTTP.sys routes all requests
-		# on this port to our queue regardless of the Host header value (IP, hostname, FQDN).
-		# Specific-hostname prefixes only match exact Host headers, causing 503 for any mismatch.
+		# Use the strong wildcard prefix so HTTP.sys routes all requests on this port to our
+		# queue regardless of the Host header (IP, short name, FQDN). Specific-hostname
+		# prefixes only match exact Host headers and caused 503 when they did not match.
 		$listenerPrefix = "http://+:$port/"
 		$listener.Prefixes.Add($listenerPrefix)
-		Write-Host "Binding to $listenerPrefix" -ForegroundColor Cyan
+		Write-Host ''
+		Write-Host "Recommended URL (automatic Kerberos for domain members):" -ForegroundColor Yellow
+		Write-Host "  http://$fqdn`:$port/" -ForegroundColor Green
+		Write-Host ''
+		Write-Host "Also accessible at:" -ForegroundColor Cyan
 		foreach ($p in $prefixes) {
-			Write-Host "  Accessible at $p" -ForegroundColor Cyan
+			Write-Host "  $p" -ForegroundColor Cyan
 		}
 
 		try {
