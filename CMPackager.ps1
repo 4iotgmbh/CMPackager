@@ -2343,18 +2343,17 @@ function Get-InstallerURLfromWinget {
 
 	function Register-WebServerUrlAcl {
 		param([int]$Port)
-		$url = "http://+:$Port/"
+		$url     = "http://+:$Port/"
+		$pattern = [regex]::Escape($url)
 		$existing = (& netsh http show urlacl url=$url 2>&1) | Out-String
-		if ($existing -notmatch 'Reserved URL') {
+		if ($existing -notmatch $pattern) {
 			$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 			Add-LogContent "WebServer: registering URL ACL for $url (user: $currentUser)"
-			try {
-				$cmdArgs = @('http', 'add', 'urlacl', "url=$url", "user=$currentUser")
-				$result = (& netsh @cmdArgs 2>&1) | Out-String
-				Add-LogContent "WebServer: URL ACL result - $($result.Trim())"
-			} catch {
-				Add-LogContent "WebServer: URL ACL registration failed - $($_.Exception.Message)"
-				Write-Host "WARNING: Could not register URL ACL. Run as administrator if the server fails to start." -ForegroundColor Yellow
+			$cmdArgs = @('http', 'add', 'urlacl', "url=$url", "user=$currentUser")
+			$result  = (& netsh @cmdArgs 2>&1) | Out-String
+			Add-LogContent "WebServer: URL ACL result - $($result.Trim())"
+			if ($result -match 'Error' -or $result -match 'Access is denied') {
+				Write-Host "WARNING: URL ACL registration failed ($($result.Trim())). Run as administrator if the server fails to start." -ForegroundColor Yellow
 			}
 		} else {
 			Add-LogContent "WebServer: URL ACL already registered for $url"
@@ -2565,7 +2564,8 @@ p{color:#605e5c;font-size:14px}
 	}
 
 	function Start-CMPackagerWebServer {
-		$port          = if ($Global:WebServerPort -and [int]::TryParse($Global:WebServerPort, [ref]([ref]0).Value)) { [int]$Global:WebServerPort } else { 8080 }
+		$portRef = [ref]0
+		$port    = if ($Global:WebServerPort -and [int]::TryParse([string]$Global:WebServerPort, $portRef) -and $portRef.Value -ge 1 -and $portRef.Value -le 65535) { $portRef.Value } else { 8080 }
 		$recipesFolder = Join-Path $PSScriptRoot 'Recipes'
 
 		$prefixes = Get-WebServerPrefixes -Port $port
