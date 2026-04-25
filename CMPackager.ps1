@@ -2537,7 +2537,18 @@ p{color:#605e5c;font-size:14px}
 		$resp     = $Context.Response
 		$identity = $Context.User.Identity
 
-		$logonName = if ($identity -and $identity.Name) { $identity.Name } else { '(unknown)' }
+		# If the request arrived anonymously, issue a Negotiate challenge and return.
+		# The browser will re-issue the request with credentials in the Authorization header.
+		$isAuthenticated = $identity -and $identity.IsAuthenticated -and $identity.Name
+		if (-not $isAuthenticated) {
+			Add-LogContent "WebServer: anonymous request from $($req.RemoteEndPoint) - issuing Negotiate challenge"
+			$resp.AddHeader('WWW-Authenticate', 'Negotiate')
+			$body = New-ErrorPageHtml -StatusCode 401 -Message 'Windows authentication required.'
+			Send-WebResponse -Response $resp -StatusCode 401 -Body $body
+			return
+		}
+
+		$logonName = $identity.Name
 		Add-LogContent "WebServer: $($req.HttpMethod) $($req.Url.LocalPath) from $($req.RemoteEndPoint) user=$logonName"
 
 		$isAdmin = Test-SCCMAdminAccess -LogonName $logonName
@@ -2572,7 +2583,11 @@ p{color:#605e5c;font-size:14px}
 		Register-WebServerUrlAcl -Port $port
 
 		$listener = New-Object System.Net.HttpListener
-		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate
+		# Allow anonymous so all requests reach GetContext(). Unauthenticated requests are
+		# challenged in Invoke-WebServerRequest by sending 401 + WWW-Authenticate: Negotiate.
+		# Negotiate-only mode relies on HTTP.sys kernel-level auth before queuing, which can
+		# stall GetContext() indefinitely when NTLM/Kerberos negotiation does not complete.
+		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate -bor [System.Net.AuthenticationSchemes]::Anonymous
 
 		foreach ($p in $prefixes) {
 			$listener.Prefixes.Add($p)
