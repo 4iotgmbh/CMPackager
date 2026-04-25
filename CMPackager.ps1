@@ -2285,7 +2285,7 @@ function Get-InstallerURLfromWinget {
 		$errors = Test-SetupInputs -Settings $settings
 		if ($errors.Count -gt 0) {
 			Write-Host ''
-			Write-Host 'Cannot save — validation errors:' -ForegroundColor Red
+			Write-Host 'Cannot save - validation errors:' -ForegroundColor Red
 			foreach ($e in $errors) { Write-Host "  - $e" -ForegroundColor Red }
 			return
 		}
@@ -2349,7 +2349,7 @@ function Get-InstallerURLfromWinget {
 				Write-Output "ERROR: $msg"
 				return $false
 			} else {
-				$msg = "GitHub API connectivity check failed ($($_.Exception.Message)). Proceeding — recipes without GitHub URLs will still run."
+				$msg = "GitHub API connectivity check failed ($($_.Exception.Message)). Proceeding - recipes without GitHub URLs will still run."
 				Add-LogContent "WARNING: $msg"
 				Write-Output "WARNING: $msg"
 				return $true
