@@ -2456,11 +2456,23 @@ function Get-InstallerURLfromWinget {
 
 			function Get-SafeFilename($name) { return [System.IO.Path]::GetFileName($name) }
 
-			# ── Auth check — HTTP.sys Negotiate-only guarantees this is true ──────────
-			$identity        = $ctx.User.Identity
+			# ── Auth check ──────────────────────────────────────────────────────────
+			$identity        = if ($ctx.User) { $ctx.User.Identity } else { $null }
 			$isAuthenticated = $identity -and $identity.IsAuthenticated -and ($identity.Name -ne '')
 			if (-not $isAuthenticated) {
-				Send-JsonR $ctx @{ error = 'Authentication required' } 403
+				# With Anonymous|Negotiate: unauthenticated requests arrive here.
+				# Send a styled HTML 401 so the browser prompts for credentials
+				# (or shows an error on cancel) rather than a raw HTTP 401 page.
+				try {
+					$authHtml  = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Authentication Required</title><style>body{font-family:'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:40px 48px;text-align:center}h1{color:#6366f1;margin-bottom:12px}p{color:#8892a4;font-size:14px}</style></head><body><div class='card'><h1>Authentication Required</h1><p>Please sign in with your Windows credentials to access CMPackager.</p></div></body></html>"
+					$authBytes = [System.Text.Encoding]::UTF8.GetBytes($authHtml)
+					$ctx.Response.StatusCode      = 401
+					$ctx.Response.AddHeader('WWW-Authenticate', 'Negotiate')
+					$ctx.Response.ContentType     = 'text/html; charset=utf-8'
+					$ctx.Response.ContentLength64 = $authBytes.Length
+					$ctx.Response.OutputStream.Write($authBytes, 0, $authBytes.Length)
+					$ctx.Response.OutputStream.Close()
+				} catch {}
 				return
 			}
 
@@ -2472,30 +2484,45 @@ function Get-InstallerURLfromWinget {
 			if ([string]::IsNullOrWhiteSpace($siteCode) -or [string]::IsNullOrWhiteSpace($siteServer)) {
 				$isAdmin = $true
 			} else {
+				# Use .NET Management directly so we can set a 5-second timeout.
+				# Fail-open on connection/timeout errors (unreachable SCCM server) so
+				# the web UI is not blocked; fail-closed only when WMI explicitly says
+				# the user is not in SMS_Admin.
 				try {
 					$safeName = $logonName.Replace('\', '\\').Replace("'", "''")
-					$admins = Get-WmiObject -Namespace "root\SMS\site_$siteCode" `
-						-ComputerName $siteServer `
-						-Query "SELECT LogonName FROM SMS_Admin WHERE LogonName = '$safeName'" `
-						-ErrorAction Stop
-					$isAdmin = ($null -ne $admins)
-				} catch {
+					$wmiQuery = "SELECT LogonName FROM SMS_Admin WHERE LogonName = '$safeName'"
+					$connOpts = New-Object System.Management.ConnectionOptions
+					$connOpts.Timeout = [TimeSpan]::FromSeconds(5)
+					$scope = New-Object System.Management.ManagementScope ("\\$siteServer\root\SMS\site_$siteCode", $connOpts)
+					$scope.Connect()
+					$objQuery = New-Object System.Management.ObjectQuery ($wmiQuery)
+					$enumOpts = New-Object System.Management.EnumerationOptions
+					$enumOpts.Timeout = [TimeSpan]::FromSeconds(5)
+					$searcher = New-Object System.Management.ManagementObjectSearcher ($scope, $objQuery, $enumOpts)
+					$results  = @($searcher.Get())
+					$searcher.Dispose()
+					$isAdmin  = $results.Count -gt 0
+				} catch [System.Management.ManagementException] {
 					$isAdmin = $false
+				} catch {
+					$isAdmin = $true
 				}
 			}
 			if (-not $isAdmin) {
 				$p = $ctx.Request.Url.AbsolutePath
-				if ($p -like '/api/*') {
-					Send-JsonR $ctx @{ error = 'Access denied'; user = $logonName } 403
-				} else {
-					$html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Access Denied</title><style>body{font-family:'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:40px 48px;text-align:center}h1{color:#ef4444;margin-bottom:12px}p{color:#8892a4;font-size:14px}</style></head><body><div class='card'><h1>Access Denied</h1><p>$logonName is not an SCCM administrative user.</p></div></body></html>"
-					$bytes = [System.Text.Encoding]::UTF8.GetBytes($html)
-					$ctx.Response.StatusCode      = 403
-					$ctx.Response.ContentType     = 'text/html; charset=utf-8'
-					$ctx.Response.ContentLength64 = $bytes.Length
-					$ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
-					$ctx.Response.OutputStream.Close()
-				}
+				try {
+					if ($p -like '/api/*') {
+						Send-JsonR $ctx @{ error = 'Access denied'; user = $logonName } 403
+					} else {
+						$html  = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Access Denied</title><style>body{font-family:'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:40px 48px;text-align:center}h1{color:#ef4444;margin-bottom:12px}p{color:#8892a4;font-size:14px}</style></head><body><div class='card'><h1>Access Denied</h1><p>$logonName is not an SCCM administrative user.</p></div></body></html>"
+						$bytes = [System.Text.Encoding]::UTF8.GetBytes($html)
+						$ctx.Response.StatusCode      = 403
+						$ctx.Response.ContentType     = 'text/html; charset=utf-8'
+						$ctx.Response.ContentLength64 = $bytes.Length
+						$ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+						$ctx.Response.OutputStream.Close()
+					}
+				} catch {}
 				return
 			}
 
@@ -2919,11 +2946,13 @@ function Get-InstallerURLfromWinget {
 			$method = $req.HttpMethod
 
 			if ($method -eq 'OPTIONS') {
-				$resp.Headers.Add('Access-Control-Allow-Origin', '*')
-				$resp.Headers.Add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
-				$resp.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
-				$resp.StatusCode = 204
-				$resp.Close()
+				try {
+					$resp.Headers.Add('Access-Control-Allow-Origin', '*')
+					$resp.Headers.Add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+					$resp.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
+					$resp.StatusCode = 204
+					$resp.Close()
+				} catch {}
 				return
 			}
 
@@ -2968,8 +2997,12 @@ function Get-InstallerURLfromWinget {
 		Register-SPNForWebServer -Fqdn $fqdn -Port $port
 
 		$listener = New-Object System.Net.HttpListener
-		# Negotiate-only: HTTP.sys owns the complete NTLM/Kerberos handshake before queuing.
-		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate
+		# Anonymous|Negotiate: HTTP.sys handles the full Negotiate/NTLM/Kerberos exchange
+		# for requests that carry an Authorization header.  Requests with no Authorization
+		# arrive as anonymous (IsAuthenticated=false) and are challenged by our handler with
+		# a styled HTML 401 + WWW-Authenticate: Negotiate.  This allows us to customise the
+		# 401 page (shown on cancel or auth failure) instead of getting HTTP.sys's raw 401.
+		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate -bor [System.Net.AuthenticationSchemes]::Anonymous
 		$listener.Prefixes.Add("http://+:$port/")
 
 		$pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 8)
