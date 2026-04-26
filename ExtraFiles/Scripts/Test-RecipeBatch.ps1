@@ -20,7 +20,8 @@
 
 .PARAMETER OutputPath
     Directory where the results CSV is written.
-    Defaults to the current working directory.
+    Defaults to the AuditLogPath from CMPackager.prefs if set, otherwise the
+    CMPackager project root (the same directory the web server searches by default).
 
 .PARAMETER TimeoutMinutes
     Per-test timeout passed to Test-RecipeInstallation.ps1.
@@ -51,7 +52,7 @@ param (
     [string]$RecipesPath = (Join-Path $PSScriptRoot '..\..' 'Disabled'),
 
     [Parameter(Mandatory = $false)]
-    [string]$OutputPath = (Get-Location).Path,
+    [string]$OutputPath = '',
 
     [Parameter(Mandatory = $false)]
     [int]$TimeoutMinutes = 30,
@@ -65,6 +66,22 @@ param (
 
 Set-StrictMode -Off
 $ErrorActionPreference = 'Continue'
+
+# ── Resolve OutputPath default ────────────────────────────────────────────────
+
+$projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..' '..'))
+
+if (-not $OutputPath) {
+    $auditLogPath = ''
+    $prefsFile = Join-Path $projectRoot 'CMPackager.prefs'
+    if (Test-Path $prefsFile -ErrorAction SilentlyContinue) {
+        try {
+            [xml]$prefs = Get-Content $prefsFile -Raw
+            $auditLogPath = $prefs.PackagerPrefs.AuditLogPath
+        } catch {}
+    }
+    $OutputPath = if ($auditLogPath) { $auditLogPath } else { $projectRoot }
+}
 
 # ── Resolve paths ─────────────────────────────────────────────────────────────
 

@@ -2188,18 +2188,21 @@ function Get-InstallerURLfromWinget {
 		Write-Host ''
 		Write-SpectreRule -Title 'Optional Settings' -Color 'Grey'
 		$s.IconRepo            = Read-SpectreText    -Message 'Icon Repository (leave blank to skip)' -DefaultAnswer $Defaults.IconRepo -AllowEmpty
-		$noVersion             = Read-SpectreConfirm -Message 'Hide version in Software Center display names?' -DefaultAnswer (if ($Defaults.NoVersionInSWCenter -eq 'True') { 'y' } else { 'n' })
+		$noVersionDefault      = if ($Defaults.NoVersionInSWCenter -eq 'True') { 'y' } else { 'n' }
+		$noVersion             = Read-SpectreConfirm -Message 'Hide version in Software Center display names?' -DefaultAnswer $noVersionDefault
 		$s.NoVersionInSWCenter = $noVersion.ToString()
 
 		Write-Host ''
 		Write-SpectreRule -Title 'Email Reporting' -Color 'Grey'
-		$sendEmail             = Read-SpectreConfirm -Message 'Enable email reports?' -DefaultAnswer (if ($Defaults.SendEmailPreference -eq 'True') { 'y' } else { 'n' })
+		$sendEmailDefault      = if ($Defaults.SendEmailPreference -eq 'True') { 'y' } else { 'n' }
+		$sendEmail             = Read-SpectreConfirm -Message 'Enable email reports?' -DefaultAnswer $sendEmailDefault
 		$s.SendEmailPreference = $sendEmail.ToString()
 		if ($sendEmail) {
 			$s.EmailTo                 = read-required 'Email To'    $Defaults.EmailTo     { param($v) $v -match '@' } 'Must contain @.'
 			$s.EmailFrom               = read-required 'Email From'  $Defaults.EmailFrom   { param($v) $v -match '@' } 'Must contain @.'
 			$s.EmailServer             = read-required 'SMTP Server' $Defaults.EmailServer { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
-			$notifyFail                = Read-SpectreConfirm -Message 'Notify on download failure?' -DefaultAnswer (if ($Defaults.NotifyOnDownloadFailure -eq 'True') { 'y' } else { 'n' })
+			$notifyFailDefault         = if ($Defaults.NotifyOnDownloadFailure -eq 'True') { 'y' } else { 'n' }
+			$notifyFail                = Read-SpectreConfirm -Message 'Notify on download failure?' -DefaultAnswer $notifyFailDefault
 			$s.NotifyOnDownloadFailure = $notifyFail.ToString()
 		} else {
 			$s.EmailTo                 = $Defaults.EmailTo
@@ -2240,7 +2243,7 @@ function Get-InstallerURLfromWinget {
 			[pscustomobject]@{ Setting = 'Web Server Port';           Value = $s.WebServerPort }
 			[pscustomobject]@{ Setting = 'Required SCCM Role';        Value = if ($s.WebServerRequiredRole) { $s.WebServerRequiredRole } else { '(any admin)' } }
 		)
-		Format-SpectreTable -Data $tableData -Color 'Grey'
+		Format-SpectreTable -Data $tableData -Color 'Grey' | Out-Null
 
 		$save = Read-SpectreConfirm -Message 'Save these settings?' -DefaultAnswer 'y'
 		if (-not $save) { return $null }
@@ -2305,7 +2308,7 @@ function Get-InstallerURLfromWinget {
 			Invoke-InteractiveSetup -Defaults $defaults
 		}
 
-		if ($null -eq $settings) {
+		if ($null -eq $settings -or $settings -isnot [hashtable]) {
 			Write-Host 'Setup cancelled. No changes were saved.' -ForegroundColor Yellow
 			return
 		}
@@ -2318,9 +2321,14 @@ function Get-InstallerURLfromWinget {
 			return
 		}
 
-		Save-SetupPrefs -Settings $settings -PreferenceFile $PreferenceFile -TemplatePath "$PSScriptRoot\CMPackager.prefs.template"
-		Write-Host ''
-		Write-Host "Configuration saved to $PreferenceFile" -ForegroundColor Green
+		try {
+			Save-SetupPrefs -Settings $settings -PreferenceFile $PreferenceFile -TemplatePath "$PSScriptRoot\CMPackager.prefs.template"
+			Write-Host ''
+			Write-Host "Configuration saved to $PreferenceFile" -ForegroundColor Green
+		} catch {
+			Write-Host ''
+			Write-Host "Failed to save configuration: $_" -ForegroundColor Red
+		}
 	}
 
 	function Get-WebServerPrefixes {
