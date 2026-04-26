@@ -24,6 +24,7 @@
 param (
 	[switch]$Setup = $false,
 	[switch]$WebServer = $false,
+	[switch]$WebServerPublic = $false,
 
 	[ValidateScript({
 		if (-not ($_ | Resolve-Path | Test-Path -PathType Leaf)) {
@@ -2403,6 +2404,7 @@ function Get-InstallerURLfromWinget {
 	}
 
 	function Start-CMPackagerWebServer {
+		param([switch]$Public)
 		$portRef = [ref]0
 		$port    = if ($Global:WebServerPort -and [int]::TryParse([string]$Global:WebServerPort, $portRef) -and $portRef.Value -ge 1 -and $portRef.Value -le 65535) { $portRef.Value } else { 8080 }
 		$webRoot   = Join-Path $PSScriptRoot 'Web'
@@ -2425,6 +2427,7 @@ function Get-InstallerURLfromWinget {
 			DebugMode      = $false
 			ReaderRS       = $null
 			ReaderPS       = $null
+			PublicMode     = $Public.IsPresent
 		})
 
 		$handlerScript = {
@@ -2457,24 +2460,27 @@ function Get-InstallerURLfromWinget {
 
 			function Get-SafeFilename($name) { return [System.IO.Path]::GetFileName($name) }
 
-			# ── Auth check ──────────────────────────────────────────────────────────
-			# With Negotiate-only, HTTP.sys guarantees every context is authenticated.
-			# The null guard handles any edge-case where the identity is unexpectedly absent.
-			$identity        = if ($ctx.User) { $ctx.User.Identity } else { $null }
-			$isAuthenticated = $identity -and $identity.IsAuthenticated -and ($identity.Name -ne '')
-			if (-not $isAuthenticated) {
-				try { $ctx.Response.StatusCode = 403; $ctx.Response.Close() } catch {}
-				return
-			}
+			# ── Auth + SCCM admin check (public mode only) ──────────────────────────
+			# In localhost mode (-WebServer) the listener is bound to 127.0.0.1 only and
+			# uses anonymous auth — anyone with local access is trusted.
+			# In public mode (-WebServerPublic) HTTP.sys Negotiate-only guarantees every
+			# context is already authenticated before we see it.
+			if ($shared.PublicMode) {
+				$identity        = if ($ctx.User) { $ctx.User.Identity } else { $null }
+				$isAuthenticated = $identity -and $identity.IsAuthenticated -and ($identity.Name -ne '')
+				if (-not $isAuthenticated) {
+					try { $ctx.Response.StatusCode = 403; $ctx.Response.Close() } catch {}
+					return
+				}
 
-			$logonName = $identity.Name
+				$logonName = $identity.Name
 
-			# ── SCCM admin check ─────────────────────────────────────────────────────
-			$siteCode  = $shared.CMSite
-			$siteServer = $shared.SiteServer
-			if ([string]::IsNullOrWhiteSpace($siteCode) -or [string]::IsNullOrWhiteSpace($siteServer)) {
-				$isAdmin = $true
-			} else {
+				# ── SCCM admin check ─────────────────────────────────────────────────
+				$siteCode   = $shared.CMSite
+				$siteServer = $shared.SiteServer
+				if ([string]::IsNullOrWhiteSpace($siteCode) -or [string]::IsNullOrWhiteSpace($siteServer)) {
+					$isAdmin = $true
+				} else {
 				# Use .NET Management directly so we can set a 5-second timeout.
 				# Fail-open on connection/timeout errors (unreachable SCCM server) so
 				# the web UI is not blocked; fail-closed only when WMI explicitly says
@@ -2534,6 +2540,7 @@ function Get-InstallerURLfromWinget {
 				} catch {}
 				return
 			}
+			} # end if ($shared.PublicMode)
 
 			# ── Handler helpers ──────────────────────────────────────────────────────
 			function Parse-RecipeMeta($file, $state) {
@@ -3018,30 +3025,42 @@ function Get-InstallerURLfromWinget {
 			}
 		}
 
-		$fqdn = try { [System.Net.Dns]::GetHostEntry('localhost').HostName } catch { $env:COMPUTERNAME }
-
-		$prefixes = Get-WebServerPrefixes -Port $port
-		Register-WebServerUrlAcl -Port $port
-		Register-SPNForWebServer -Fqdn $fqdn -Port $port
-
 		$listener = New-Object System.Net.HttpListener
-		# Negotiate-only: HTTP.sys owns the complete NTLM/Kerberos handshake before queuing
-		# the context to our app.  Every context we receive is already authenticated.
-		# This is required so browsers (Chrome/Edge/IE) present their Windows credential
-		# dialog — a user-generated 401 from our app is treated as an HTML error page
-		# rather than an auth challenge, suppressing the dialog entirely.
-		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate
-		$listener.Prefixes.Add("http://+:$port/")
+
+		if ($Public) {
+			Write-Host ''
+			Write-Host "WARNING: Windows Integrated Authentication for the web server is" -ForegroundColor Yellow
+			Write-Host "         still experimental. Use -WebServer (localhost only) for" -ForegroundColor Yellow
+			Write-Host "         stable operation." -ForegroundColor Yellow
+
+			$fqdn     = try { [System.Net.Dns]::GetHostEntry('localhost').HostName } catch { $env:COMPUTERNAME }
+			$prefixes = Get-WebServerPrefixes -Port $port
+			Register-WebServerUrlAcl -Port $port
+			Register-SPNForWebServer -Fqdn $fqdn -Port $port
+
+			# Negotiate-only: HTTP.sys owns the complete NTLM/Kerberos handshake before
+			# queuing the context to our app.  Required so browsers present their Windows
+			# credential dialog rather than displaying our app-level 401 as an error page.
+			$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate
+			$listener.Prefixes.Add("http://+:$port/")
+
+			Write-Host ''
+			Write-Host "Recommended URL (automatic Kerberos for domain members):" -ForegroundColor Yellow
+			Write-Host "  http://$fqdn`:$port/" -ForegroundColor Green
+			Write-Host ''
+			Write-Host "Also accessible at:" -ForegroundColor Cyan
+			foreach ($p in $prefixes) { Write-Host "  $p" -ForegroundColor Cyan }
+		} else {
+			$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Anonymous
+			$listener.Prefixes.Add("http://localhost:$port/")
+
+			Write-Host ''
+			Write-Host "Web server URL (localhost only):" -ForegroundColor Cyan
+			Write-Host "  http://localhost:$port/" -ForegroundColor Green
+		}
 
 		$pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 8)
 		$pool.Open()
-
-		Write-Host ''
-		Write-Host "Recommended URL (automatic Kerberos for domain members):" -ForegroundColor Yellow
-		Write-Host "  http://$fqdn`:$port/" -ForegroundColor Green
-		Write-Host ''
-		Write-Host "Also accessible at:" -ForegroundColor Cyan
-		foreach ($p in $prefixes) { Write-Host "  $p" -ForegroundColor Cyan }
 
 		try {
 			$listener.Start()
@@ -3151,8 +3170,8 @@ function Get-InstallerURLfromWinget {
 		exit
 	}
 
-	if ($WebServer) {
-		Start-CMPackagerWebServer
+	if ($WebServer -or $WebServerPublic) {
+		Start-CMPackagerWebServer -Public:$WebServerPublic
 		exit
 	}
 
