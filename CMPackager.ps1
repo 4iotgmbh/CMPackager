@@ -2275,14 +2275,17 @@ function Get-InstallerURLfromWinget {
 			ContentFolderPattern      = $xml.PackagerPrefs.ContentFolderPattern
 			CMPSModulePath            = $xml.PackagerPrefs.CMPSModulePath
 			GitHubToken               = $xml.PackagerPrefs.GitHubToken
-			WebServerPort             = $xml.PackagerPrefs.WebServerPort
+			WebServerPort             = if ($xml.PackagerPrefs.WebServerPort) { $xml.PackagerPrefs.WebServerPort } else { '8080' }
 			WebServerRequiredRole     = $xml.PackagerPrefs.WebServerRequiredRole
 		}
 
 		$useSpectre = $false
-		if (Get-Module -ListAvailable -Name PwshSpectreConsole -ErrorAction SilentlyContinue) {
+		if ((Get-Module -Name PwshSpectreConsole -ErrorAction SilentlyContinue) -or
+		    (Get-Module -ListAvailable -Name PwshSpectreConsole -ErrorAction SilentlyContinue)) {
 			try {
-				Import-Module PwshSpectreConsole -ErrorAction Stop
+				if (-not (Get-Module -Name PwshSpectreConsole -ErrorAction SilentlyContinue)) {
+					Import-Module PwshSpectreConsole -ErrorAction Stop
+				}
 				$useSpectre = $true
 			} catch {
 				Write-Host "Failed to import PwshSpectreConsole ($_). Falling back to interactive prompts." -ForegroundColor Yellow
