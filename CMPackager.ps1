@@ -2459,9 +2459,19 @@ function Get-InstallerURLfromWinget {
 
 			function Get-SafeFilename($name) { return [System.IO.Path]::GetFileName($name) }
 
+			# ── Loopback restriction (localhost mode only) ───────────────────────────
+			# -WebServer binds to http://+:PORT/ but restricts access to loopback clients.
+			# -WebServerPublic skips this check and uses Negotiate auth instead.
+			if (-not $shared.PublicMode) {
+				$remoteAddr = $ctx.Request.RemoteEndPoint.Address
+				$isLoopback = [System.Net.IPAddress]::IsLoopback($remoteAddr)
+				if (-not $isLoopback) {
+					try { $ctx.Response.StatusCode = 403; $ctx.Response.Close() } catch {}
+					return
+				}
+			}
+
 			# ── Auth + SCCM admin check (public mode only) ──────────────────────────
-			# In localhost mode (-WebServer) the listener is bound to 127.0.0.1 only and
-			# uses anonymous auth — anyone with local access is trusted.
 			# In public mode (-WebServerPublic) HTTP.sys Negotiate-only guarantees every
 			# context is already authenticated before we see it.
 			if ($shared.PublicMode) {
@@ -3050,9 +3060,9 @@ function Get-InstallerURLfromWinget {
 			Write-Host "Also accessible at:" -ForegroundColor Cyan
 			foreach ($p in $prefixes) { Write-Host "  $p" -ForegroundColor Cyan }
 		} else {
-			Register-WebServerUrlAcl -Port $port -Url "http://localhost:$port/"
+			Register-WebServerUrlAcl -Port $port
 			$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Anonymous
-			$listener.Prefixes.Add("http://localhost:$port/")
+			$listener.Prefixes.Add("http://+:$port/")
 
 			Write-Host ''
 			Write-Host "Web server URL (localhost only):" -ForegroundColor Cyan
