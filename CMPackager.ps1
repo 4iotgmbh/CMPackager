@@ -2054,12 +2054,19 @@ function Get-InstallerURLfromWinget {
 			[xml]$xml = Get-Content $TemplatePath
 		}
 		foreach ($key in $Settings.Keys) {
-			if ($null -eq $xml.PackagerPrefs.SelectSingleNode($key)) {
-				[void]$xml.PackagerPrefs.AppendChild($xml.CreateElement($key))
+			$node = $xml.PackagerPrefs.SelectSingleNode($key)
+			if ($null -eq $node) {
+				$node = $xml.PackagerPrefs.AppendChild($xml.CreateElement($key))
 			}
-			$xml.PackagerPrefs.$key = [string]$Settings[$key]
+			$node.RemoveAll()
+			if ([string]$Settings[$key]) { $node.InnerText = [string]$Settings[$key] }
 		}
-		$xml.PackagerPrefs.LogPath = "$(Split-Path $Settings.TempDir -Parent)\CMPackager.log"
+		$logNode = $xml.PackagerPrefs.SelectSingleNode('LogPath')
+		if ($null -eq $logNode) {
+			$logNode = $xml.PackagerPrefs.AppendChild($xml.CreateElement('LogPath'))
+		}
+		$logNode.RemoveAll()
+		$logNode.InnerText = "$(Split-Path $Settings.TempDir -Parent)\CMPackager.log"
 		$parentDir = Split-Path $PreferenceFile -Parent
 		if ($parentDir -and -not (Test-Path $parentDir -ErrorAction SilentlyContinue)) {
 			New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
