@@ -2102,6 +2102,7 @@ function Get-InstallerURLfromWinget {
 		Write-Host ''
 		Write-Host '-- Optional Settings --' -ForegroundColor Yellow
 		$s.IconRepo            = prompt-field 'Icon Repository (leave blank to skip)' $Defaults.IconRepo -optional
+		$s.AuditLogPath        = prompt-field 'Audit Log Path for batch test results (leave blank to use script folder)' $Defaults.AuditLogPath -optional
 		$s.NoVersionInSWCenter = (prompt-bool 'Hide version in Software Center display names?' ($Defaults.NoVersionInSWCenter -eq 'True')).ToString()
 		Write-Host ''
 		Write-Host '-- Email Reporting --' -ForegroundColor Yellow
@@ -2148,6 +2149,7 @@ function Get-InstallerURLfromWinget {
 			'Deployment Collection'     = if ($s.PreferredDeployCollection) { $s.PreferredDeployCollection } else { '(empty)' }
 			'Web Server Port'           = $s.WebServerPort
 			'Required SCCM Role'        = if ($s.WebServerRequiredRole) { $s.WebServerRequiredRole } else { '(any admin)' }
+			'Audit Log Path'            = if ($s.AuditLogPath) { $s.AuditLogPath } else { '(script folder)' }
 		}
 		foreach ($pair in $reviewItems.GetEnumerator()) {
 			Write-Host ("  {0,-30} {1}" -f "$($pair.Key):", $pair.Value)
@@ -2188,6 +2190,7 @@ function Get-InstallerURLfromWinget {
 		Write-Host ''
 		Write-SpectreRule -Title 'Optional Settings' -Color 'Grey' | Out-Host
 		$s.IconRepo            = Read-SpectreText    -Message 'Icon Repository (leave blank to skip)' -DefaultAnswer $Defaults.IconRepo -AllowEmpty
+		$s.AuditLogPath        = Read-SpectreText    -Message 'Audit Log Path for batch test results (leave blank to use script folder)' -DefaultAnswer $Defaults.AuditLogPath -AllowEmpty
 		$noVersionDefault      = if ($Defaults.NoVersionInSWCenter -eq 'True') { 'y' } else { 'n' }
 		$noVersion             = Read-SpectreConfirm -Message 'Hide version in Software Center display names?' -DefaultAnswer $noVersionDefault
 		$s.NoVersionInSWCenter = $noVersion.ToString()
@@ -2242,6 +2245,7 @@ function Get-InstallerURLfromWinget {
 			[pscustomobject]@{ Setting = 'Deployment Collection';     Value = if ($s.PreferredDeployCollection) { $s.PreferredDeployCollection } else { '(empty)' } }
 			[pscustomobject]@{ Setting = 'Web Server Port';           Value = $s.WebServerPort }
 			[pscustomobject]@{ Setting = 'Required SCCM Role';        Value = if ($s.WebServerRequiredRole) { $s.WebServerRequiredRole } else { '(any admin)' } }
+			[pscustomobject]@{ Setting = 'Audit Log Path';             Value = if ($s.AuditLogPath) { $s.AuditLogPath } else { '(script folder)' } }
 		)
 		Format-SpectreTable -Data $tableData -Color 'Grey' | Out-Host
 
@@ -2277,6 +2281,7 @@ function Get-InstallerURLfromWinget {
 			GitHubToken               = $xml.PackagerPrefs.GitHubToken
 			WebServerPort             = if ($xml.PackagerPrefs.WebServerPort) { $xml.PackagerPrefs.WebServerPort } else { '8080' }
 			WebServerRequiredRole     = $xml.PackagerPrefs.WebServerRequiredRole
+			AuditLogPath              = $xml.PackagerPrefs.AuditLogPath
 		}
 
 		$useSpectre = $false
