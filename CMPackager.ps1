@@ -2280,17 +2280,13 @@ function Get-InstallerURLfromWinget {
 		}
 
 		$useSpectre = $false
-		if ((Get-Module -Name PwshSpectreConsole -ErrorAction SilentlyContinue) -or
-		    (Get-Module -ListAvailable -Name PwshSpectreConsole -ErrorAction SilentlyContinue)) {
-			try {
-				if (-not (Get-Module -Name PwshSpectreConsole -ErrorAction SilentlyContinue)) {
-					Import-Module PwshSpectreConsole -ErrorAction Stop
-				}
-				$useSpectre = $true
-			} catch {
-				Write-Host "Failed to import PwshSpectreConsole ($_). Falling back to interactive prompts." -ForegroundColor Yellow
+		try {
+			if (-not (Get-Module -Name PwshSpectreConsole -ErrorAction SilentlyContinue)) {
+				Import-Module PwshSpectreConsole -ErrorAction Stop
 			}
-		} else {
+			$useSpectre = $true
+		} catch {
+			# Module not loadable — offer install
 			Write-Host ''
 			Write-Host 'PwshSpectreConsole is not installed. It provides a nicer setup experience.'
 			$answer = Read-Host 'Install it now? (requires internet access) [y/N]'
