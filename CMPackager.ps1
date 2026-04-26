@@ -127,6 +127,7 @@ process {
 		# Web server settings
 		$Global:WebServerPort         = $PackagerPrefs.PackagerPrefs.WebServerPort
 		$Global:WebServerRequiredRole = $PackagerPrefs.PackagerPrefs.WebServerRequiredRole
+		$Global:AuditLogPath          = $PackagerPrefs.PackagerPrefs.AuditLogPath
 		$Global:PreferenceFile        = $PreferenceFile
 	}
 
@@ -2420,6 +2421,7 @@ function Get-InstallerURLfromWinget {
 			CMPSModulePath = $Global:CMPSModulePath
 			PrefsExists    = (Test-Path $prefsFile -ErrorAction SilentlyContinue)
 			PrefsFile      = $prefsFile
+			AuditLogPath   = [string]$Global:AuditLogPath
 			ProjectRoot    = $PSScriptRoot
 			WebRoot        = $webRoot
 			StartTime      = $null
@@ -2768,8 +2770,15 @@ function Get-InstallerURLfromWinget {
 			}
 
 			function Handle-Tests($ctx) {
-				$csvFiles = @(Get-ChildItem "$($shared.ProjectRoot)\RecipeTestResults_*.csv" -ErrorAction SilentlyContinue) |
-					Sort-Object LastWriteTime -Descending
+				$searchPaths = @($shared.ProjectRoot)
+				if ($shared.AuditLogPath -and (Test-Path $shared.AuditLogPath -ErrorAction SilentlyContinue)) {
+					$searchPaths += $shared.AuditLogPath
+				}
+				$csvFiles = @(
+					foreach ($p in $searchPaths) {
+						Get-ChildItem "$p\RecipeTestResults_*.csv" -ErrorAction SilentlyContinue
+					}
+				) | Sort-Object LastWriteTime -Descending
 				if (-not $csvFiles) { Send-JsonR $ctx @{ rows = @(); file = $null; available = $false }; return }
 				$latest = $csvFiles[0]
 				try {
