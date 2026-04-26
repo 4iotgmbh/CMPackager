@@ -2054,6 +2054,9 @@ function Get-InstallerURLfromWinget {
 			[xml]$xml = Get-Content $TemplatePath
 		}
 		foreach ($key in $Settings.Keys) {
+			if ($null -eq $xml.PackagerPrefs.SelectSingleNode($key)) {
+				[void]$xml.PackagerPrefs.AppendChild($xml.CreateElement($key))
+			}
 			$xml.PackagerPrefs.$key = [string]$Settings[$key]
 		}
 		$xml.PackagerPrefs.LogPath = "$(Split-Path $Settings.TempDir -Parent)\CMPackager.log"
