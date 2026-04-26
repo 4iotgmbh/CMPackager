@@ -2344,21 +2344,20 @@ function Get-InstallerURLfromWinget {
 	}
 
 	function Register-WebServerUrlAcl {
-		param([int]$Port)
-		$url     = "http://+:$Port/"
-		$pattern = [regex]::Escape($url)
-		$existing = (& netsh http show urlacl url=$url 2>&1) | Out-String
+		param([int]$Port, [string]$Url = "http://+:$Port/")
+		$pattern = [regex]::Escape($Url)
+		$existing = (& netsh http show urlacl url=$Url 2>&1) | Out-String
 		if ($existing -notmatch $pattern) {
 			$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-			Add-LogContent "WebServer: registering URL ACL for $url (user: $currentUser)"
-			$cmdArgs = @('http', 'add', 'urlacl', "url=$url", "user=$currentUser")
+			Add-LogContent "WebServer: registering URL ACL for $Url (user: $currentUser)"
+			$cmdArgs = @('http', 'add', 'urlacl', "url=$Url", "user=$currentUser")
 			$result  = (& netsh @cmdArgs 2>&1) | Out-String
 			Add-LogContent "WebServer: URL ACL result - $($result.Trim())"
 			if ($result -match 'Error' -or $result -match 'Access is denied') {
 				Write-Host "WARNING: URL ACL registration failed ($($result.Trim())). Run as administrator if the server fails to start." -ForegroundColor Yellow
 			}
 		} else {
-			Add-LogContent "WebServer: URL ACL already registered for $url"
+			Add-LogContent "WebServer: URL ACL already registered for $Url"
 		}
 	}
 
@@ -3051,6 +3050,7 @@ function Get-InstallerURLfromWinget {
 			Write-Host "Also accessible at:" -ForegroundColor Cyan
 			foreach ($p in $prefixes) { Write-Host "  $p" -ForegroundColor Cyan }
 		} else {
+			Register-WebServerUrlAcl -Port $port -Url "http://localhost:$port/"
 			$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Anonymous
 			$listener.Prefixes.Add("http://localhost:$port/")
 
