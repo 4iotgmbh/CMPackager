@@ -2380,358 +2380,6 @@ function Get-InstallerURLfromWinget {
 		}
 	}
 
-	function Get-RecipeSummaries {
-		param([string]$RecipesFolder)
-		$summaries = New-Object System.Collections.Generic.List[psobject]
-		$xmlFiles = Get-ChildItem -Path $RecipesFolder -Filter '*.xml' -ErrorAction SilentlyContinue |
-			Where-Object { $_.Name -ne 'Template.xml' } |
-			Sort-Object Name
-		foreach ($f in $xmlFiles) {
-			try {
-				[xml]$r = Get-Content $f.FullName
-				$app = $r.ApplicationDef.Application
-				$dts = @($r.ApplicationDef.DeploymentTypes.DeploymentType)
-				$hasPrefetch = $false
-				foreach ($dl in @($r.ApplicationDef.Downloads.Download)) {
-					if (-not [string]::IsNullOrWhiteSpace($dl.PrefetchScript)) { $hasPrefetch = $true }
-				}
-				[void]$summaries.Add([pscustomobject]@{
-					Name        = [string]$app.Name
-					Publisher   = [string]$app.Publisher
-					Description = [string]$app.Description
-					FileName    = $f.Name
-					DtCount     = $dts.Count
-					DtNames     = ($dts | ForEach-Object { $_.Name }) -join ', '
-					HasPrefetch = $hasPrefetch
-					Distribute  = [string]$r.ApplicationDef.Distribution.DistributeContent
-					Deploy      = [string]$r.ApplicationDef.Deployment.DeploySoftware
-				})
-			} catch {
-				[void]$summaries.Add([pscustomobject]@{
-					Name        = $f.BaseName
-					Publisher   = ''
-					Description = "(Parse error: $($_.Exception.Message))"
-					FileName    = $f.Name
-					DtCount     = 0
-					DtNames     = ''
-					HasPrefetch = $false
-					Distribute  = ''
-					Deploy      = ''
-				})
-			}
-		}
-		return $summaries
-	}
-
-	function New-RecipesPageHtml {
-		param([string]$RecipesFolder)
-		$enc       = [System.Net.WebUtility]
-		$recipes   = Get-RecipeSummaries -RecipesFolder $RecipesFolder
-		$rows = foreach ($r in $recipes) {
-			$urlBadge  = if ($r.HasPrefetch) { '<span class="badge bdyn">Dynamic</span>' } else { '<span class="badge bsta">Static</span>' }
-			$distBadge = if ($r.Distribute -eq 'True') { '<span class="badge byes">Yes</span>' } else { '<span class="badge bno">No</span>' }
-			$depBadge  = if ($r.Deploy -eq 'True') { '<span class="badge byes">Yes</span>' } else { '<span class="badge bno">No</span>' }
-			$dtHtml    = if ($r.DtCount -gt 0) { "<span class='cnt'>$($r.DtCount)</span> $($enc::HtmlEncode($r.DtNames))" } else { '<em>none</em>' }
-			$runUrl    = '/run?recipe=' + [System.Uri]::EscapeDataString($r.FileName)
-			"<tr><td><strong>$($enc::HtmlEncode($r.Name))</strong><br><small>$($enc::HtmlEncode($r.FileName))</small></td><td>$($enc::HtmlEncode($r.Publisher))</td><td>$($enc::HtmlEncode($r.Description))</td><td>$dtHtml</td><td>$urlBadge</td><td>$distBadge</td><td>$depBadge</td><td><a class='run-btn' href='$runUrl'>&#9654; Run</a></td></tr>"
-		}
-		$rowsHtml  = $rows -join "`n"
-		$count     = $recipes.Count
-		$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm'
-		return @"
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>CMPackager - Recipes</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;background:#f3f2f1;color:#323130;min-height:100vh}
-.bar{background:#0078d4;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px}
-.bar h1{font-size:18px;font-weight:600}.bar .sub{font-size:13px;opacity:.8}
-.wrap{padding:24px;max-width:1400px;margin:0 auto}
-.meta{margin-bottom:16px;font-size:13px;color:#605e5c}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
-thead tr{background:#f8f8f8}
-th{padding:10px 14px;text-align:left;font-weight:600;font-size:12px;color:#605e5c;text-transform:uppercase;letter-spacing:.04em;border-bottom:2px solid #edebe9}
-td{padding:10px 14px;border-bottom:1px solid #edebe9;vertical-align:top}
-tr:last-child td{border-bottom:none}tr:hover td{background:#f3f2f1}
-small{color:#605e5c;font-family:'Cascadia Code',Consolas,monospace;font-size:11px}
-.cnt{display:inline-block;background:#e1dfdd;color:#323130;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:600;margin-right:4px}
-.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
-.bdyn{background:#deecf9;color:#004e8c}.bsta{background:#e8e8e8;color:#444}
-.byes{background:#dff6dd;color:#107c10}.bno{background:#fde7e9;color:#a4262c}
-.run-btn{display:inline-block;padding:4px 12px;background:#0078d4;color:#fff;border-radius:4px;text-decoration:none;font-size:12px;font-weight:600;white-space:nowrap}
-.run-btn:hover{background:#106ebe}
-</style></head>
-<body>
-<div class="bar"><h1>CMPackager</h1><span class="sub">Recipe Browser</span></div>
-<div class="wrap">
-<p class="meta">$count recipe(s) | loaded $timestamp</p>
-<table>
-<thead><tr><th>Application</th><th>Publisher</th><th>Description</th><th>Deployment Types</th><th>URL</th><th>Distribute</th><th>Deploy</th><th></th></tr></thead>
-<tbody>
-$rowsHtml
-</tbody></table></div></body></html>
-"@
-	}
-
-	function New-AccessDeniedPageHtml {
-		param([string]$LogonName, [string]$RequiredRole)
-		$enc      = [System.Net.WebUtility]
-		$roleNote = if ($RequiredRole) {
-			"<p>Access requires the SCCM role: <strong>$($enc::HtmlEncode($RequiredRole))</strong></p>"
-		} else {
-			'<p>Access requires SCCM Administrative User permissions.</p>'
-		}
-		return @"
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>CMPackager - Access Denied</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#f3f2f1;color:#323130;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.card{background:#fff;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:40px 48px;max-width:480px;text-align:center}
-h1{font-size:22px;color:#a4262c;margin-bottom:12px}
-p{color:#605e5c;margin-bottom:8px;font-size:14px}
-.acct{font-family:'Cascadia Code',Consolas,monospace;background:#f3f2f1;padding:4px 10px;border-radius:4px;display:inline-block;margin-top:8px}
-</style></head>
-<body>
-<div class="card">
-<h1>Access Denied</h1>
-$roleNote
-<p>Signed in as:</p>
-<span class="acct">$($enc::HtmlEncode($LogonName))</span>
-</div></body></html>
-"@
-	}
-
-	function New-AuthRequiredPageHtml {
-		param([string]$ServerHost)
-		$enc      = [System.Net.WebUtility]
-		$safeHost = $enc::HtmlEncode($ServerHost)
-		return @"
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>CMPackager - Sign In</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#f3f2f1;color:#323130;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.card{background:#fff;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:40px 48px;max-width:560px;width:100%}
-h1{font-size:20px;color:#0078d4;margin-bottom:8px}
-.lead{color:#605e5c;font-size:14px;margin-bottom:24px;line-height:1.5}
-h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:#605e5c;margin-bottom:8px}
-ol{padding-left:20px;font-size:14px;color:#323130;line-height:1.9;margin-bottom:20px}
-code{font-family:'Cascadia Code',Consolas,monospace;background:#f3f2f1;padding:2px 6px;border-radius:3px;font-size:12px}
-.cmd{background:#1e1e1e;color:#d4d4d4;padding:12px 16px;border-radius:4px;font-family:'Cascadia Code',Consolas,monospace;font-size:12px;margin:8px 0 20px;white-space:pre-wrap;word-break:break-all}
-.reload{display:inline-block;margin-top:4px;color:#0078d4;font-size:14px;text-decoration:none}
-.reload:hover{text-decoration:underline}
-</style></head>
-<body>
-<div class="card">
-<h1>Windows Authentication Required</h1>
-<p class="lead">CMPackager uses Windows Integrated Authentication (NTLM/Kerberos). Edge and Chrome require the server to be explicitly trusted before they send credentials automatically.</p>
-<h2>Option A &mdash; Internet Options (all browsers)</h2>
-<ol>
-<li>Open <code>inetcpl.cpl</code></li>
-<li>Security &rarr; Local intranet &rarr; Sites &rarr; Advanced</li>
-<li>Add <code>http://$safeHost</code> and click OK</li>
-<li>Restart the browser and reload this page</li>
-</ol>
-<h2>Option B &mdash; Registry (run as Administrator)</h2>
-<div class="cmd">reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMap\Domains\$safeHost" /v http /t REG_DWORD /d 1 /f</div>
-<a class="reload" href="javascript:location.reload()">Reload after configuring</a>
-</div>
-</body></html>
-"@
-	}
-
-	function New-RunOutputPageHtml {
-		param([string]$RecipeName, [string]$JobId, [string]$State, [string]$Output, [datetime]$StartTime)
-		$isDone = $State -in @('Completed', 'Failed', 'Stopped')
-		$refreshMeta = if ($isDone) { '' } else { '<meta http-equiv="refresh" content="3">' }
-		if ($State -eq 'Completed') { $stCls = 'byes'; $stTxt = 'Done' }
-		elseif ($State -eq 'Failed') { $stCls = 'bno';  $stTxt = 'Failed' }
-		else                         { $stCls = 'brun'; $stTxt = 'Running...' }
-		$enc       = [System.Net.WebUtility]
-		$safeName  = $enc::HtmlEncode($RecipeName)
-		$safeOut   = $enc::HtmlEncode($Output)
-		$elapsed   = ([datetime]::Now - $StartTime).ToString('mm\:ss')
-		return @"
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-$refreshMeta
-<title>CMPackager - $safeName</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;background:#f3f2f1;color:#323130;min-height:100vh}
-.bar{background:#0078d4;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:12px}
-.bar h1{font-size:18px;font-weight:600}.bar a{color:#fff;opacity:.8;text-decoration:none;font-size:13px;margin-left:auto}
-.bar a:hover{opacity:1}
-.wrap{padding:24px;max-width:1200px;margin:0 auto}
-.info{display:flex;align-items:center;gap:12px;margin-bottom:16px}
-.info h2{font-size:16px;font-weight:600}
-.badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600}
-.byes{background:#dff6dd;color:#107c10}.bno{background:#fde7e9;color:#a4262c}.brun{background:#deecf9;color:#004e8c}
-.elapsed{font-size:12px;color:#605e5c;margin-left:auto}
-pre{background:#1e1e1e;color:#d4d4d4;padding:16px;border-radius:4px;font-family:'Cascadia Code',Consolas,monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;min-height:200px;max-height:70vh;overflow-y:auto}
-</style></head>
-<body>
-<div class="bar"><h1>CMPackager</h1><span style="opacity:.8;font-size:13px">Run Output</span><a href="/">&#8592; Back to Recipes</a></div>
-<div class="wrap">
-<div class="info">
-  <h2>$safeName</h2>
-  <span class="badge $stCls">$stTxt</span>
-  <span class="elapsed">$elapsed elapsed</span>
-</div>
-<pre>$safeOut</pre>
-</div>
-</body></html>
-"@
-	}
-
-	function Start-RecipeRun {
-		param([string]$RecipeName, [string]$RecipesFolder)
-		$jobId    = [System.Guid]::NewGuid().ToString('N').Substring(0, 16)
-		$logFile  = Join-Path $Global:TempDir "webjob_${jobId}.log"
-		$scriptPath = $PSCommandPath
-		$prefsFile  = $Global:PreferenceFile
-		$job = Start-Job -ScriptBlock {
-			param($sp, $rn, $pf, $lf)
-			try {
-				& $sp -SingleRecipe $rn -PreferenceFile $pf 2>&1 |
-					ForEach-Object { $_.ToString() } |
-					Out-File -FilePath $lf -Encoding utf8 -Append
-			} catch {
-				"ERROR: $_" | Out-File -FilePath $lf -Encoding utf8 -Append
-			}
-		} -ArgumentList @($scriptPath, $RecipeName, $prefsFile, $logFile)
-		$script:WebJobs[$jobId] = [pscustomobject]@{
-			Job       = $job
-			LogFile   = $logFile
-			Recipe    = $RecipeName
-			StartTime = Get-Date
-		}
-		return $jobId
-	}
-
-	function New-ErrorPageHtml {
-		param([int]$StatusCode, [string]$Message)
-		$enc = [System.Net.WebUtility]
-		return @"
-<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>CMPackager - $StatusCode</title>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:#f3f2f1;color:#323130;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.card{background:#fff;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:40px 48px;max-width:480px;text-align:center}
-h1{font-size:48px;font-weight:700;color:#0078d4;margin-bottom:8px}
-p{color:#605e5c;font-size:14px}
-</style></head>
-<body>
-<div class="card"><h1>$StatusCode</h1><p>$($enc::HtmlEncode($Message))</p></div>
-</body></html>
-"@
-	}
-
-	function Send-WebResponse {
-		param($Response, [int]$StatusCode, [string]$Body)
-		$bytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
-		$Response.StatusCode      = $StatusCode
-		$Response.ContentType     = 'text/html; charset=utf-8'
-		$Response.ContentLength64 = $bytes.Length
-		$Response.OutputStream.Write($bytes, 0, $bytes.Length)
-		$Response.OutputStream.Close()
-	}
-
-	function Send-WebRedirect {
-		param($Response, [string]$Location)
-		$Response.StatusCode = 302
-		$Response.AddHeader('Location', $Location)
-		$Response.ContentLength64 = 0
-		$Response.OutputStream.Close()
-	}
-
-	function Invoke-WebServerRequest {
-		param($Context, [string]$RecipesFolder)
-		$req      = $Context.Request
-		$resp     = $Context.Response
-		$identity = $Context.User.Identity
-
-		# With Negotiate-only mode HTTP.sys guarantees every context is authenticated.
-		# This block is a defensive fallback only — it should never fire in practice.
-		$isAuthenticated = $identity -and $identity.IsAuthenticated -and ($identity.Name -ne '')
-		if (-not $isAuthenticated) {
-			Add-LogContent "WebServer: WARNING - unauthenticated context from $($req.RemoteEndPoint) (unexpected with Negotiate-only)"
-			$body = New-AccessDeniedPageHtml -LogonName '(unknown)' -RequiredRole $Global:WebServerRequiredRole
-			Send-WebResponse -Response $resp -StatusCode 403 -Body $body
-			return
-		}
-
-		$logonName = $identity.Name
-		$authType  = try { $identity.AuthenticationType } catch { 'unknown' }
-		Add-LogContent "WebServer: $($req.HttpMethod) $($req.Url.LocalPath) from $($req.RemoteEndPoint) user=$logonName auth=$authType"
-
-		$isAdmin = Test-SCCMAdminAccess -LogonName $logonName
-		Add-LogContent "WebServer: SCCM admin check for '$logonName' = $isAdmin"
-		if ($isAdmin -ne $true) {
-			$body = New-AccessDeniedPageHtml -LogonName $logonName -RequiredRole $Global:WebServerRequiredRole
-			Send-WebResponse -Response $resp -StatusCode 403 -Body $body
-			return
-		}
-
-		$path = $req.Url.LocalPath.TrimEnd('/')
-		if ($path -eq '' -or $path -eq '/') {
-			try {
-				$body = New-RecipesPageHtml -RecipesFolder $RecipesFolder
-				Add-LogContent "WebServer: sending recipes page ($($body.Length) chars)"
-				Send-WebResponse -Response $resp -StatusCode 200 -Body $body
-			} catch {
-				Add-LogContent "WebServer: error building recipes page - $($_.Exception.Message)"
-				$body = New-ErrorPageHtml -StatusCode 503 -Message 'Failed to load recipe data.'
-				Send-WebResponse -Response $resp -StatusCode 503 -Body $body
-			}
-		} elseif ($path -eq '/run') {
-			$recipeName = $req.QueryString['recipe']
-			if ([string]::IsNullOrWhiteSpace($recipeName) -or $recipeName -match '[/\\]' -or -not $recipeName.EndsWith('.xml')) {
-				$body = New-ErrorPageHtml -StatusCode 400 -Message 'Invalid recipe name.'
-				Send-WebResponse -Response $resp -StatusCode 400 -Body $body
-				return
-			}
-			$recipePath = Join-Path $RecipesFolder $recipeName
-			if (-not (Test-Path $recipePath -PathType Leaf)) {
-				$body = New-ErrorPageHtml -StatusCode 404 -Message "Recipe '$recipeName' not found."
-				Send-WebResponse -Response $resp -StatusCode 404 -Body $body
-				return
-			}
-			try {
-				$jobId = Start-RecipeRun -RecipeName $recipeName -RecipesFolder $RecipesFolder
-				Add-LogContent "WebServer: started job $jobId for recipe '$recipeName'"
-				Send-WebRedirect -Response $resp -Location "/output?job=$jobId"
-			} catch {
-				Add-LogContent "WebServer: error starting recipe run - $($_.Exception.Message)"
-				$body = New-ErrorPageHtml -StatusCode 503 -Message 'Failed to start recipe run.'
-				Send-WebResponse -Response $resp -StatusCode 503 -Body $body
-			}
-		} elseif ($path -eq '/output') {
-			$jobId   = $req.QueryString['job']
-			$jobInfo = if ($jobId) { $script:WebJobs[$jobId] } else { $null }
-			if (-not $jobInfo) {
-				$body = New-ErrorPageHtml -StatusCode 404 -Message 'Job not found.'
-				Send-WebResponse -Response $resp -StatusCode 404 -Body $body
-				return
-			}
-			$output = if (Test-Path $jobInfo.LogFile) { Get-Content $jobInfo.LogFile -Raw -Encoding UTF8 } else { '(no output yet)' }
-			$state  = $jobInfo.Job.State
-			$body   = New-RunOutputPageHtml -RecipeName $jobInfo.Recipe -JobId $jobId -State $state -Output $output -StartTime $jobInfo.StartTime
-			Send-WebResponse -Response $resp -StatusCode 200 -Body $body
-		} else {
-			$body = New-ErrorPageHtml -StatusCode 404 -Message 'Page not found.'
-			Send-WebResponse -Response $resp -StatusCode 404 -Body $body
-		}
-	}
-
 	function Register-SPNForWebServer {
 		param([string]$Fqdn, [int]$Port)
 		# Kerberos requires an HTTP SPN so the KDC can issue tickets for this service.
@@ -2757,8 +2405,561 @@ p{color:#605e5c;font-size:14px}
 	function Start-CMPackagerWebServer {
 		$portRef = [ref]0
 		$port    = if ($Global:WebServerPort -and [int]::TryParse([string]$Global:WebServerPort, $portRef) -and $portRef.Value -ge 1 -and $portRef.Value -le 65535) { $portRef.Value } else { 8080 }
-		$recipesFolder  = Join-Path $PSScriptRoot 'Recipes'
-		$script:WebJobs = @{}
+		$webRoot   = Join-Path $PSScriptRoot 'Web'
+		$prefsFile = [string]$Global:PreferenceFile
+
+		$shared = [hashtable]::Synchronized(@{
+			CMProcess      = $null
+			Running        = $false
+			OutputBuffer   = [System.Collections.Generic.List[string]]::new()
+			OutputLock     = [object]::new()
+			LogPath        = $Global:LogPath
+			CMSite         = $Global:SiteCode
+			SiteServer     = $Global:SiteServer
+			CMPSModulePath = $Global:CMPSModulePath
+			PrefsExists    = (Test-Path $prefsFile -ErrorAction SilentlyContinue)
+			PrefsFile      = $prefsFile
+			ProjectRoot    = $PSScriptRoot
+			WebRoot        = $webRoot
+			StartTime      = $null
+			DebugMode      = $false
+			ReaderRS       = $null
+			ReaderPS       = $null
+		})
+
+		$handlerScript = {
+			param($ctx, $shared)
+
+			function Send-JsonR($ctx, $obj, [int]$status = 200) {
+				$json  = $obj | ConvertTo-Json -Depth 10 -Compress
+				$bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+				$ctx.Response.StatusCode      = $status
+				$ctx.Response.ContentType     = 'application/json; charset=utf-8'
+				$ctx.Response.ContentLength64 = $bytes.Length
+				$ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+				$ctx.Response.OutputStream.Close()
+			}
+
+			function Send-FileR($ctx, $path, $mime) {
+				if (-not (Test-Path $path)) { $ctx.Response.StatusCode = 404; $ctx.Response.Close(); return }
+				$bytes = [System.IO.File]::ReadAllBytes($path)
+				$ctx.Response.ContentType     = $mime
+				$ctx.Response.ContentLength64 = $bytes.Length
+				$ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+				$ctx.Response.OutputStream.Close()
+			}
+
+			function Read-JsonBody($ctx) {
+				$reader = [System.IO.StreamReader]::new($ctx.Request.InputStream, [System.Text.Encoding]::UTF8)
+				return $reader.ReadToEnd() | ConvertFrom-Json
+			}
+
+			function Get-SafeFilename($name) { return [System.IO.Path]::GetFileName($name) }
+
+			# ── Auth check — HTTP.sys Negotiate-only guarantees this is true ──────────
+			$identity        = $ctx.User.Identity
+			$isAuthenticated = $identity -and $identity.IsAuthenticated -and ($identity.Name -ne '')
+			if (-not $isAuthenticated) {
+				Send-JsonR $ctx @{ error = 'Authentication required' } 403
+				return
+			}
+
+			$logonName = $identity.Name
+
+			# ── SCCM admin check ─────────────────────────────────────────────────────
+			$siteCode  = $shared.CMSite
+			$siteServer = $shared.SiteServer
+			if ([string]::IsNullOrWhiteSpace($siteCode) -or [string]::IsNullOrWhiteSpace($siteServer)) {
+				$isAdmin = $true
+			} else {
+				try {
+					$safeName = $logonName.Replace('\', '\\').Replace("'", "''")
+					$admins = Get-WmiObject -Namespace "root\SMS\site_$siteCode" `
+						-ComputerName $siteServer `
+						-Query "SELECT LogonName FROM SMS_Admin WHERE LogonName = '$safeName'" `
+						-ErrorAction Stop
+					$isAdmin = ($null -ne $admins)
+				} catch {
+					$isAdmin = $false
+				}
+			}
+			if (-not $isAdmin) {
+				$p = $ctx.Request.Url.AbsolutePath
+				if ($p -like '/api/*') {
+					Send-JsonR $ctx @{ error = 'Access denied'; user = $logonName } 403
+				} else {
+					$html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Access Denied</title><style>body{font-family:'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:40px 48px;text-align:center}h1{color:#ef4444;margin-bottom:12px}p{color:#8892a4;font-size:14px}</style></head><body><div class='card'><h1>Access Denied</h1><p>$logonName is not an SCCM administrative user.</p></div></body></html>"
+					$bytes = [System.Text.Encoding]::UTF8.GetBytes($html)
+					$ctx.Response.StatusCode      = 403
+					$ctx.Response.ContentType     = 'text/html; charset=utf-8'
+					$ctx.Response.ContentLength64 = $bytes.Length
+					$ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+					$ctx.Response.OutputStream.Close()
+				}
+				return
+			}
+
+			# ── Handler helpers ──────────────────────────────────────────────────────
+			function Parse-RecipeMeta($file, $state) {
+				try {
+					[xml]$x = Get-Content $file.FullName -Raw
+					$app = $x.ApplicationDef.Application
+					[PSCustomObject]@{
+						file      = $file.Name
+						appName   = if ($app.Name)      { $app.Name }      else { $file.BaseName }
+						publisher = if ($app.Publisher) { $app.Publisher } else { '' }
+						state     = $state
+					}
+				} catch {
+					[PSCustomObject]@{ file = $file.Name; appName = $file.BaseName; publisher = ''; state = $state }
+				}
+			}
+
+			# ── API handlers ─────────────────────────────────────────────────────────
+			function Handle-Status($ctx) {
+				if ($shared.Running -and $shared.CMProcess -and $shared.CMProcess.HasExited) {
+					$shared.Running   = $false
+					$shared.CMProcess = $null
+				}
+				$lines = $null
+				[System.Threading.Monitor]::Enter($shared.OutputLock)
+				try   { $lines = @($shared.OutputBuffer.ToArray()) }
+				finally { [System.Threading.Monitor]::Exit($shared.OutputLock) }
+				$last50 = if ($lines.Count -gt 50) { $lines[($lines.Count - 50)..($lines.Count - 1)] } else { $lines }
+				Send-JsonR $ctx @{
+					running     = $shared.Running
+					prefsExists = $shared.PrefsExists
+					logPath     = $shared.LogPath
+					lastLines   = $last50
+					totalLines  = $lines.Count
+					startTime   = if ($shared.StartTime) { $shared.StartTime.ToString('o') } else { $null }
+				}
+			}
+
+			function Handle-Recipes($ctx) {
+				$root = $shared.ProjectRoot
+				$enabled = @(Get-ChildItem "$root\Recipes\*.xml" -ErrorAction SilentlyContinue |
+					Where-Object { $_.Name -notlike '_*' -and $_.Name -ne 'Template.xml' } |
+					ForEach-Object { Parse-RecipeMeta $_ 'enabled' })
+				$enabledNames = @{}
+				$enabled | ForEach-Object { $enabledNames[$_.file] = $true }
+				$disabled = @(Get-ChildItem "$root\Disabled\*.xml" -ErrorAction SilentlyContinue |
+					Where-Object { $_.Name -notlike '_*' -and -not $enabledNames.ContainsKey($_.Name) } |
+					ForEach-Object { Parse-RecipeMeta $_ 'disabled' })
+				Send-JsonR $ctx @{ enabled = $enabled; disabled = $disabled }
+			}
+
+			function Handle-Enable($ctx) {
+				$body = Read-JsonBody $ctx
+				$file = Get-SafeFilename $body.file
+				$src  = Join-Path $shared.ProjectRoot "Disabled\$file"
+				$dst  = Join-Path $shared.ProjectRoot "Recipes\$file"
+				if (-not (Test-Path $src)) { Send-JsonR $ctx @{ error = 'File not found in Disabled/' } 404; return }
+				if (Test-Path $dst)        { Send-JsonR $ctx @{ error = 'Already exists in Recipes/' }  409; return }
+				Move-Item $src $dst -Force
+				Send-JsonR $ctx @{ ok = $true }
+			}
+
+			function Handle-Disable($ctx) {
+				$body = Read-JsonBody $ctx
+				$file = Get-SafeFilename $body.file
+				$src  = Join-Path $shared.ProjectRoot "Recipes\$file"
+				$dst  = Join-Path $shared.ProjectRoot "Disabled\$file"
+				if (-not (Test-Path $src)) { Send-JsonR $ctx @{ error = 'File not found in Recipes/' }  404; return }
+				if (Test-Path $dst)        { Send-JsonR $ctx @{ error = 'Already exists in Disabled/' } 409; return }
+				Move-Item $src $dst -Force
+				Send-JsonR $ctx @{ ok = $true }
+			}
+
+			function Handle-Run($ctx) {
+				if ($shared.Running) { Send-JsonR $ctx @{ error = 'Already running' } 409; return }
+				if (-not $shared.PrefsExists) { Send-JsonR $ctx @{ error = 'CMPackager.prefs not found' } 412; return }
+				$body   = Read-JsonBody $ctx
+				$mode   = $body.mode
+				$recipe = if ($body.recipe) { Get-SafeFilename $body.recipe } else { '' }
+				$scriptPath  = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
+				$recipesPath = Join-Path $shared.ProjectRoot 'Recipes'
+				$prefsArg    = " -PreferenceFile `"$($shared.PrefsFile)`" -RecipePath `"$recipesPath`""
+				$psArgs = if ($mode -eq 'single' -and $recipe) {
+					"-ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg -SingleRecipe `"$recipe`""
+				} else {
+					"-ExecutionPolicy Bypass -File `"$scriptPath`"$prefsArg"
+				}
+				$psi = [System.Diagnostics.ProcessStartInfo]::new('powershell.exe', $psArgs)
+				$psi.WorkingDirectory       = $shared.ProjectRoot
+				$psi.UseShellExecute        = $false
+				$psi.RedirectStandardOutput = $true
+				$psi.RedirectStandardError  = $true
+				$psi.CreateNoWindow         = $true
+				$proc = [System.Diagnostics.Process]::new()
+				$proc.StartInfo = $psi
+				[System.Threading.Monitor]::Enter($shared.OutputLock)
+				try { $shared.OutputBuffer.Clear() }
+				finally { [System.Threading.Monitor]::Exit($shared.OutputLock) }
+				$proc.Start() | Out-Null
+				$shared.CMProcess = $proc
+				$shared.Running   = $true
+				$shared.StartTime = [datetime]::Now
+				$readerScript = {
+					param($stream, $shared, $prefix)
+					try {
+						while ($true) {
+							$line = $stream.ReadLine()
+							if ($null -eq $line) { break }
+							$ts = "[$(Get-Date -Format 'HH:mm:ss')]$prefix $line"
+							[System.Threading.Monitor]::Enter($shared.OutputLock)
+							try {
+								if ($shared.OutputBuffer.Count -gt 5000) { $shared.OutputBuffer.RemoveRange(0, 500) }
+								$shared.OutputBuffer.Add($ts)
+							} finally { [System.Threading.Monitor]::Exit($shared.OutputLock) }
+						}
+					} catch {}
+				}
+				$rs1 = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+				$rs1.Open()
+				$ps1 = [System.Management.Automation.PowerShell]::Create()
+				$ps1.Runspace = $rs1
+				$ps1.AddScript($readerScript).AddArgument($proc.StandardOutput).AddArgument($shared).AddArgument('') | Out-Null
+				$ps1.BeginInvoke() | Out-Null
+				$rs2 = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+				$rs2.Open()
+				$ps2 = [System.Management.Automation.PowerShell]::Create()
+				$ps2.Runspace = $rs2
+				$ps2.AddScript($readerScript).AddArgument($proc.StandardError).AddArgument($shared).AddArgument(' [ERR]') | Out-Null
+				$ps2.BeginInvoke() | Out-Null
+				$shared.ReaderRS = @($rs1, $rs2)
+				$shared.ReaderPS = @($ps1, $ps2)
+				Send-JsonR $ctx @{ ok = $true; pid = $proc.Id; mode = $mode; recipe = $recipe }
+			}
+
+			function Handle-Stop($ctx) {
+				$proc = $shared.CMProcess
+				if ($proc -and -not $proc.HasExited) { try { $proc.Kill() } catch {} }
+				$shared.Running   = $false
+				$shared.CMProcess = $null
+				if ($shared.ReaderRS) {
+					foreach ($rs in $shared.ReaderRS) { try { $rs.Close() } catch {} }
+					$shared.ReaderRS = $null
+					$shared.ReaderPS = $null
+				}
+				Send-JsonR $ctx @{ ok = $true }
+			}
+
+			function Handle-Stream($ctx) {
+				$resp = $ctx.Response
+				$resp.ContentType = 'text/event-stream; charset=utf-8'
+				$resp.SendChunked = $true
+				$resp.Headers.Add('Cache-Control', 'no-cache')
+				$resp.Headers.Add('X-Accel-Buffering', 'no')
+				$fromParam = $ctx.Request.QueryString['from']
+				$lastIndex = if ($fromParam -match '^\d+$') { [int]$fromParam } else { 0 }
+				$writer = [System.IO.StreamWriter]::new($resp.OutputStream, [System.Text.Encoding]::UTF8)
+				$writer.AutoFlush = $true
+				$writer.NewLine   = "`n"
+				$initLogPath   = $shared.LogPath
+				$lastLogOffset = if ($initLogPath -and (Test-Path $initLogPath -ErrorAction SilentlyContinue)) {
+					try { [Math]::Max(0L, [System.IO.FileInfo]::new($initLogPath).Length - 8192L) } catch { 0L }
+				} else { 0L }
+				$heartbeatTick = 0
+				try {
+					while ($true) {
+						$lines = $null
+						[System.Threading.Monitor]::Enter($shared.OutputLock)
+						try   { $lines = @($shared.OutputBuffer.ToArray()) }
+						finally { [System.Threading.Monitor]::Exit($shared.OutputLock) }
+						for ($i = $lastIndex; $i -lt $lines.Count; $i++) {
+							$escaped = $lines[$i] -replace "`n", ' '
+							$writer.WriteLine("data: $escaped")
+							$writer.WriteLine('')
+						}
+						if ($lines.Count -gt $lastIndex) {
+							$lastIndex = $lines.Count
+							$writer.WriteLine("event: index")
+							$writer.WriteLine("data: $lastIndex")
+							$writer.WriteLine('')
+						}
+						$logPath = $shared.LogPath
+						if ($logPath -and (Test-Path $logPath)) {
+							try {
+								$fs = [System.IO.FileStream]::new($logPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+								$fs.Seek($lastLogOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+								$sr = [System.IO.StreamReader]::new($fs, [System.Text.Encoding]::UTF8)
+								$newContent = $sr.ReadToEnd()
+								$lastLogOffset = $fs.Position
+								$sr.Close(); $fs.Close()
+								if ($newContent.Length -gt 0) {
+									foreach ($logLine in ($newContent -split "`r?`n")) {
+										if ($logLine.Trim()) {
+											$escaped = $logLine -replace "`n", ' '
+											$writer.WriteLine("event: log")
+											$writer.WriteLine("data: $escaped")
+											$writer.WriteLine('')
+										}
+									}
+								}
+							} catch { $lastLogOffset = 0 }
+						}
+						$heartbeatTick++
+						if ($heartbeatTick -ge 30) {
+							$writer.WriteLine(': heartbeat')
+							$writer.WriteLine('')
+							$heartbeatTick = 0
+						}
+						Start-Sleep -Milliseconds 500
+					}
+				} catch [System.IO.IOException]       {}
+				catch [System.Exception]              {}
+				finally {
+					try { $writer.Close() } catch {}
+					try { $resp.OutputStream.Close() } catch {}
+				}
+			}
+
+			function Handle-Tests($ctx) {
+				$csvFiles = @(Get-ChildItem "$($shared.ProjectRoot)\RecipeTestResults_*.csv" -ErrorAction SilentlyContinue) |
+					Sort-Object LastWriteTime -Descending
+				if (-not $csvFiles) { Send-JsonR $ctx @{ rows = @(); file = $null; available = $false }; return }
+				$latest = $csvFiles[0]
+				try {
+					$rows = @(Import-Csv $latest.FullName)
+					Send-JsonR $ctx @{ rows = $rows; file = $latest.Name; available = $true }
+				} catch {
+					Send-JsonR $ctx @{ rows = @(); file = $latest.Name; available = $false; error = $_.Exception.Message }
+				}
+			}
+
+			function Handle-SCCM($ctx) {
+				$siteCode = $shared.CMSite
+				if (-not $siteCode) {
+					Send-JsonR $ctx @{ available = $false; message = 'CMSite not configured in CMPackager.prefs.' }
+					return
+				}
+				$modulePath = $null
+				if ($shared.CMPSModulePath) {
+					$candidate = Join-Path $shared.CMPSModulePath 'ConfigurationManager.psd1'
+					if (Test-Path $candidate) { $modulePath = $candidate }
+				}
+				if (-not $modulePath) {
+					$m = Get-Module ConfigurationManager -ListAvailable -ErrorAction SilentlyContinue | Select-Object -First 1
+					if ($m) { $modulePath = $m.Path }
+				}
+				if (-not $modulePath -and $env:SMS_ADMIN_UI_PATH) {
+					$smsItem = Get-Item $env:SMS_ADMIN_UI_PATH -ErrorAction SilentlyContinue
+					if ($smsItem) {
+						$candidate = Join-Path $smsItem.Parent.FullName 'ConfigurationManager.psd1'
+						if (Test-Path $candidate) { $modulePath = $candidate }
+					}
+				}
+				if (-not $modulePath) {
+					Send-JsonR $ctx @{ available = $false; message = 'ConfigurationManager module not found.' }
+					return
+				}
+				try {
+					Import-Module $modulePath -ErrorAction Stop
+					Push-Location
+					Set-Location "${siteCode}:" -ErrorAction Stop
+					$recipes = @(Get-ChildItem "$($shared.ProjectRoot)\Recipes\*.xml" -ErrorAction SilentlyContinue |
+						Where-Object { $_.Name -notlike '_*' -and $_.Name -ne 'Template.xml' })
+					$results = @(foreach ($r in $recipes) {
+						try {
+							[xml]$x = Get-Content $r.FullName -Raw
+							$appName = $x.ApplicationDef.Application.Name
+							$apps = @(Get-CMApplication -Name "$appName*" -Fast -ErrorAction SilentlyContinue)
+							$app  = $apps | Where-Object { -not $_.IsExpired -and -not $_.IsSuperseded } |
+								Sort-Object DateCreated -Descending | Select-Object -First 1
+							if (-not $app) { $app = $apps | Sort-Object DateCreated -Descending | Select-Object -First 1 }
+							$deps = @()
+							if ($app) {
+								$deps = @(Get-CMDeployment -SoftwareName $app.LocalizedDisplayName -ErrorAction SilentlyContinue |
+									Select-Object CollectionName, DeploymentIntent, NumberTargeted, NumberSuccess, NumberErrors, NumberInProgress, NumberOther, NumberUnknown)
+							}
+							[PSCustomObject]@{
+								recipe      = $r.Name
+								appName     = $appName
+								sccmName    = if ($app) { $app.LocalizedDisplayName } else { $null }
+								found       = [bool]$app
+								version     = if ($app) { $app.SoftwareVersion } else { $null }
+								allVersions = $apps.Count
+								deployments = $deps
+							}
+						} catch {
+							[PSCustomObject]@{ recipe = $r.Name; appName = ''; sccmName = $null; found = $false; version = $null; allVersions = 0; deployments = @() }
+						}
+					})
+					Pop-Location
+					Send-JsonR $ctx @{ available = $true; apps = $results }
+				} catch {
+					try { Pop-Location -ErrorAction SilentlyContinue } catch {}
+					Send-JsonR $ctx @{ available = $false; error = $_.Exception.Message }
+				}
+			}
+
+			function Get-AppNameFromRecipeFile($fileName) {
+				$fullPath = Join-Path $shared.ProjectRoot "Recipes\$fileName"
+				if (-not (Test-Path $fullPath)) { return [System.IO.Path]::GetFileNameWithoutExtension($fileName) }
+				try {
+					[xml]$x = Get-Content $fullPath -Raw
+					$name = $x.ApplicationDef.Application.Name
+					if ($name) { return $name }
+				} catch {}
+				return [System.IO.Path]::GetFileNameWithoutExtension($fileName)
+			}
+
+			function Get-NextAvailableTaskTime {
+				$takenMinutes = [System.Collections.Generic.HashSet[int]]::new()
+				$existingTasks = @(Get-ScheduledTask -TaskName 'CMPackager - *' -ErrorAction SilentlyContinue)
+				foreach ($task in $existingTasks) {
+					foreach ($trigger in $task.Triggers) {
+						if ($trigger.StartBoundary) {
+							try {
+								$dt = [datetime]::Parse($trigger.StartBoundary)
+								$takenMinutes.Add($dt.Hour * 60 + $dt.Minute) | Out-Null
+							} catch {}
+						}
+					}
+				}
+				$base   = 5 * 60
+				$offset = 0
+				while ($takenMinutes.Contains($base + $offset)) { $offset += 5 }
+				$slotMinutes = $base + $offset
+				return [datetime]::Today.AddHours([int]($slotMinutes / 60)).AddMinutes($slotMinutes % 60)
+			}
+
+			function Handle-GetSchedules($ctx) {
+				$result = @{}
+				$tasks = @(Get-ScheduledTask -TaskName 'CMPackager - *' -ErrorAction SilentlyContinue)
+				if (-not $tasks.Count) { Send-JsonR $ctx $result; return }
+				$svc = New-Object -ComObject 'Schedule.Service'
+				$svc.Connect()
+				$rootFolder = $svc.GetFolder('\')
+				$recipeFiles = @(Get-ChildItem "$($shared.ProjectRoot)\Recipes\*.xml" -ErrorAction SilentlyContinue |
+					Where-Object { $_.Name -notlike '_*' -and $_.Name -ne 'Template.xml' })
+				foreach ($task in $tasks) {
+					$schedType = 'unknown'; $startTime = $null
+					try {
+						$comTask  = $rootFolder.GetTask($task.TaskName)
+						$taskXml  = [xml]$comTask.Xml
+						$ns       = 'http://schemas.microsoft.com/windows/2004/02/mit/task'
+						$nsMgr    = [System.Xml.XmlNamespaceManager]::new($taskXml.NameTable)
+						$nsMgr.AddNamespace('t', $ns)
+						$trigger  = $taskXml.SelectSingleNode('//t:Triggers/*[1]', $nsMgr)
+						if ($trigger) {
+							if     ($trigger.SelectSingleNode('t:ScheduleByDay', $nsMgr))                { $schedType = 'daily'   }
+							elseif ($trigger.SelectSingleNode('t:ScheduleByWeek', $nsMgr))               { $schedType = 'weekly'  }
+							elseif ($trigger.SelectSingleNode('t:ScheduleByMonth', $nsMgr))              { $schedType = 'monthly' }
+							elseif ($trigger.SelectSingleNode('t:ScheduleByMonthDayOfWeek', $nsMgr))     { $schedType = 'monthly' }
+							$sb = $trigger.SelectSingleNode('t:StartBoundary', $nsMgr)
+							if ($sb) { try { $startTime = [datetime]::Parse($sb.InnerText).ToString('HH:mm') } catch {} }
+						}
+					} catch {}
+					foreach ($rf in $recipeFiles) {
+						$rName = $null
+						try { [xml]$x = Get-Content $rf.FullName -Raw; $rName = $x.ApplicationDef.Application.Name } catch {}
+						if (-not $rName) { $rName = $rf.BaseName }
+						$expectedTask = "CMPackager - $($rName -replace '\\', '_')"
+						if ($expectedTask -eq $task.TaskName) {
+							$result[$rf.Name] = @{ type = $schedType; startTime = $startTime; taskName = $task.TaskName }
+							break
+						}
+					}
+				}
+				Send-JsonR $ctx $result
+			}
+
+			function Handle-SetSchedule($ctx) {
+				$body = Read-JsonBody $ctx
+				$file = Get-SafeFilename $body.file
+				$type = ([string]$body.type).ToLower()
+				if ($type -notin @('daily','weekly','monthly','none')) {
+					Send-JsonR $ctx @{ error = 'Invalid type.' } 400; return
+				}
+				$appName  = Get-AppNameFromRecipeFile $file
+				$taskName = "CMPackager - $($appName -replace '\\', '_')"
+				if ($type -eq 'none') {
+					$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+					if ($existing) { Unregister-ScheduledTask -TaskName $taskName -Confirm:$false }
+					Send-JsonR $ctx @{ ok = $true; deleted = $true; taskName = $taskName }
+					return
+				}
+				$existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+				$startDt  = if ($existing -and $existing.Triggers -and $existing.Triggers[0].StartBoundary) {
+					try { [datetime]::Parse($existing.Triggers[0].StartBoundary) } catch { Get-NextAvailableTaskTime }
+				} else { Get-NextAvailableTaskTime }
+				$timeStr   = $startDt.ToString('HH:mm')
+				$todayDow  = (Get-Date).DayOfWeek.ToString()
+				$startIso  = $startDt.ToString('s')
+				if ($type -eq 'daily') {
+					$triggerXml = "<CalendarTrigger><StartBoundary>$startIso</StartBoundary><Enabled>true</Enabled><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger>"
+				} elseif ($type -eq 'weekly') {
+					$triggerXml = "<CalendarTrigger><StartBoundary>$startIso</StartBoundary><Enabled>true</Enabled><ScheduleByWeek><WeeksInterval>1</WeeksInterval><DaysOfWeek><$todayDow /></DaysOfWeek></ScheduleByWeek></CalendarTrigger>"
+				} else {
+					$triggerXml = "<CalendarTrigger><StartBoundary>$startIso</StartBoundary><Enabled>true</Enabled><ScheduleByMonthDayOfWeek><Weeks><Week>1</Week></Weeks><DaysOfWeek><$todayDow /></DaysOfWeek><Months><January /><February /><March /><April /><May /><June /><July /><August /><September /><October /><November /><December /></Months></ScheduleByMonthDayOfWeek></CalendarTrigger>"
+				}
+				$scriptPath = Join-Path $shared.ProjectRoot 'CMPackager.ps1'
+				$recipesPath = Join-Path $shared.ProjectRoot 'Recipes'
+				$psArgs     = "-ExecutionPolicy Bypass -NonInteractive -File `"$scriptPath`" -PreferenceFile `"$($shared.PrefsFile)`" -RecipePath `"$recipesPath`" -SingleRecipe `"$file`""
+				$psArgsXml  = [System.Security.SecurityElement]::Escape($psArgs)
+				$taskXml = @"
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <Triggers>$triggerXml</Triggers>
+  <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>
+  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><ExecutionTimeLimit>PT2H</ExecutionTimeLimit><Enabled>true</Enabled></Settings>
+  <Actions><Exec><Command>powershell.exe</Command><Arguments>$psArgsXml</Arguments></Exec></Actions>
+</Task>
+"@
+				Register-ScheduledTask -TaskName $taskName -Xml $taskXml -Force -ErrorAction Stop
+				Send-JsonR $ctx @{ ok = $true; taskName = $taskName; type = $type; startTime = $timeStr }
+			}
+
+			# ── Router ───────────────────────────────────────────────────────────────
+			$req    = $ctx.Request
+			$resp   = $ctx.Response
+			$path   = $req.Url.AbsolutePath
+			$method = $req.HttpMethod
+
+			if ($method -eq 'OPTIONS') {
+				$resp.Headers.Add('Access-Control-Allow-Origin', '*')
+				$resp.Headers.Add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+				$resp.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
+				$resp.StatusCode = 204
+				$resp.Close()
+				return
+			}
+
+			try {
+				if     ($method -eq 'GET'  -and $path -eq '/')               { Send-FileR $ctx (Join-Path $shared.WebRoot 'index.html') 'text/html; charset=utf-8' }
+				elseif ($method -eq 'GET'  -and $path -eq '/app.js')         { Send-FileR $ctx (Join-Path $shared.WebRoot 'app.js') 'application/javascript; charset=utf-8' }
+				elseif ($method -eq 'GET'  -and $path -eq '/logo.png')       { Send-FileR $ctx (Join-Path $shared.WebRoot 'logo.png') 'image/png' }
+				elseif ($method -eq 'GET'  -and $path -eq '/api/status')     { Handle-Status  $ctx }
+				elseif ($method -eq 'GET'  -and $path -eq '/api/recipes')    { Handle-Recipes $ctx }
+				elseif ($method -eq 'POST' -and $path -eq '/api/enable')     { Handle-Enable  $ctx }
+				elseif ($method -eq 'POST' -and $path -eq '/api/disable')    { Handle-Disable $ctx }
+				elseif ($method -eq 'POST' -and $path -eq '/api/run')        { Handle-Run     $ctx }
+				elseif ($method -eq 'POST' -and $path -eq '/api/stop')       { Handle-Stop    $ctx }
+				elseif ($method -eq 'GET'  -and $path -eq '/api/stream')     { Handle-Stream  $ctx }
+				elseif ($method -eq 'GET'  -and $path -eq '/api/tests')      { Handle-Tests   $ctx }
+				elseif ($method -eq 'GET'  -and $path -eq '/api/sccm')       { Handle-SCCM    $ctx }
+				elseif ($method -eq 'GET'  -and $path -eq '/api/schedules')  { Handle-GetSchedules $ctx }
+				elseif ($method -eq 'POST' -and $path -eq '/api/schedule')   { Handle-SetSchedule  $ctx }
+				else {
+					$errBytes = [System.Text.Encoding]::UTF8.GetBytes('Not found')
+					$resp.StatusCode = 404
+					$resp.ContentLength64 = $errBytes.Length
+					$resp.OutputStream.Write($errBytes, 0, $errBytes.Length)
+					$resp.OutputStream.Close()
+				}
+			} catch {
+				try {
+					$errBytes = [System.Text.Encoding]::UTF8.GetBytes((@{ error = $_.Exception.Message } | ConvertTo-Json))
+					$resp.StatusCode      = 500
+					$resp.ContentType     = 'application/json'
+					$resp.ContentLength64 = $errBytes.Length
+					$resp.OutputStream.Write($errBytes, 0, $errBytes.Length)
+					$resp.OutputStream.Close()
+				} catch {}
+			}
+		}
 
 		$fqdn = try { [System.Net.Dns]::GetHostEntry('localhost').HostName } catch { $env:COMPUTERNAME }
 
@@ -2767,25 +2968,19 @@ p{color:#605e5c;font-size:14px}
 		Register-SPNForWebServer -Fqdn $fqdn -Port $port
 
 		$listener = New-Object System.Net.HttpListener
-		# Negotiate-only: HTTP.sys owns the complete NTLM/Kerberos handshake (Type1->Challenge->
-		# Type3) before queuing to GetContext(). Anonymous must NOT be included — when both are
-		# set, HTTP.sys hands each message to the app individually instead of managing the exchange
-		# itself, causing every NTLM Type-1 to arrive as an anonymous request and loop forever.
+		# Negotiate-only: HTTP.sys owns the complete NTLM/Kerberos handshake before queuing.
 		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate
+		$listener.Prefixes.Add("http://+:$port/")
 
-		# Use the strong wildcard prefix so HTTP.sys routes all requests on this port to our
-		# queue regardless of the Host header (IP, short name, FQDN). Specific-hostname
-		# prefixes only match exact Host headers and caused 503 when they did not match.
-		$listenerPrefix = "http://+:$port/"
-		$listener.Prefixes.Add($listenerPrefix)
+		$pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 8)
+		$pool.Open()
+
 		Write-Host ''
 		Write-Host "Recommended URL (automatic Kerberos for domain members):" -ForegroundColor Yellow
 		Write-Host "  http://$fqdn`:$port/" -ForegroundColor Green
 		Write-Host ''
 		Write-Host "Also accessible at:" -ForegroundColor Cyan
-		foreach ($p in $prefixes) {
-			Write-Host "  $p" -ForegroundColor Cyan
-		}
+		foreach ($p in $prefixes) { Write-Host "  $p" -ForegroundColor Cyan }
 
 		try {
 			$listener.Start()
@@ -2793,34 +2988,23 @@ p{color:#605e5c;font-size:14px}
 			Add-LogContent "WebServer started on port $port"
 
 			while ($listener.IsListening) {
-				$context = $null
+				$ctxTask = $listener.GetContextAsync()
+				while (-not $ctxTask.IsCompleted) { Start-Sleep -Milliseconds 200 }
 				try {
-					$ctxTask = $listener.GetContextAsync()
-					while (-not $ctxTask.IsCompleted) {
-						Start-Sleep -Milliseconds 200
-					}
 					$context = $ctxTask.GetAwaiter().GetResult()
-				} catch [System.Net.HttpListenerException] {
-					break
 				} catch [System.AggregateException] {
 					$inner = $_.Exception.InnerException
 					if ($inner -is [System.Net.HttpListenerException]) { break }
-					Add-LogContent "WebServer: error accepting connection - $($inner.Message)"
 					continue
 				} catch [System.InvalidOperationException] {
-					Add-LogContent "WebServer: auth exchange failed ($($_.Exception.Message)) - continuing"
 					continue
+				} catch [System.Net.HttpListenerException] {
+					break
 				}
-				if ($null -eq $context) { continue }
-				try {
-					Invoke-WebServerRequest -Context $context -RecipesFolder $recipesFolder
-				} catch {
-					Add-LogContent "WebServer: unhandled request error - $($_.Exception.Message)"
-					try {
-						$errBody = New-ErrorPageHtml -StatusCode 503 -Message 'Internal server error.'
-						Send-WebResponse -Response $context.Response -StatusCode 503 -Body $errBody
-					} catch {}
-				}
+				$ps = [System.Management.Automation.PowerShell]::Create()
+				$ps.RunspacePool = $pool
+				$ps.AddScript($handlerScript).AddArgument($context).AddArgument($shared) | Out-Null
+				$ps.BeginInvoke() | Out-Null
 			}
 		} catch [System.Management.Automation.PipelineStoppedException] {
 			Add-LogContent "WebServer: stopping (Ctrl+C)"
@@ -2830,11 +3014,17 @@ p{color:#605e5c;font-size:14px}
 		} finally {
 			if ($listener.IsListening) { $listener.Stop() }
 			$listener.Close()
+			$pool.Close()
+			if ($shared.CMProcess -and -not $shared.CMProcess.HasExited) {
+				try { $shared.CMProcess.Kill() } catch {}
+			}
+			if ($shared.ReaderRS) {
+				foreach ($rs in $shared.ReaderRS) { try { $rs.Close() } catch {} }
+			}
 			Add-LogContent "WebServer stopped."
 			Write-Host "`nCMPackager web server stopped." -ForegroundColor Yellow
 		}
 	}
-
 	function Test-GitHubApiAccess {
 		if ($Global:GitHubToken) {
 			Add-LogContent 'GitHub API: authenticated via prefs token (5,000 req/hr)'
