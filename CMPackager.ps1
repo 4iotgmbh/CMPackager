@@ -2429,6 +2429,7 @@ function Get-InstallerURLfromWinget {
 
 		$handlerScript = {
 			param($ctx, $shared)
+			try {
 
 			function Send-JsonR($ctx, $obj, [int]$status = 200) {
 				$json  = $obj | ConvertTo-Json -Depth 10 -Compress
@@ -2457,22 +2458,12 @@ function Get-InstallerURLfromWinget {
 			function Get-SafeFilename($name) { return [System.IO.Path]::GetFileName($name) }
 
 			# ── Auth check ──────────────────────────────────────────────────────────
+			# With Negotiate-only, HTTP.sys guarantees every context is authenticated.
+			# The null guard handles any edge-case where the identity is unexpectedly absent.
 			$identity        = if ($ctx.User) { $ctx.User.Identity } else { $null }
 			$isAuthenticated = $identity -and $identity.IsAuthenticated -and ($identity.Name -ne '')
 			if (-not $isAuthenticated) {
-				# With Anonymous|Negotiate: unauthenticated requests arrive here.
-				# Send a styled HTML 401 so the browser prompts for credentials
-				# (or shows an error on cancel) rather than a raw HTTP 401 page.
-				try {
-					$authHtml  = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Authentication Required</title><style>body{font-family:'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:40px 48px;text-align:center}h1{color:#6366f1;margin-bottom:12px}p{color:#8892a4;font-size:14px}</style></head><body><div class='card'><h1>Authentication Required</h1><p>Please sign in with your Windows credentials to access CMPackager.</p></div></body></html>"
-					$authBytes = [System.Text.Encoding]::UTF8.GetBytes($authHtml)
-					$ctx.Response.StatusCode      = 401
-					$ctx.Response.AddHeader('WWW-Authenticate', 'Negotiate')
-					$ctx.Response.ContentType     = 'text/html; charset=utf-8'
-					$ctx.Response.ContentLength64 = $authBytes.Length
-					$ctx.Response.OutputStream.Write($authBytes, 0, $authBytes.Length)
-					$ctx.Response.OutputStream.Close()
-				} catch {}
+				try { $ctx.Response.StatusCode = 403; $ctx.Response.Close() } catch {}
 				return
 			}
 
@@ -2505,7 +2496,25 @@ function Get-InstallerURLfromWinget {
 				} catch [System.Management.ManagementException] {
 					$isAdmin = $false
 				} catch {
-					$isAdmin = $true
+					# WMI connection failed (timeout / unreachable). Do not fail-open:
+					# if WMI is down, SCCM cannot function either, so show a clear error.
+					$wmiConnErr = $_.Exception.Message
+					$wmiConnSrv = $siteServer
+					$p = $ctx.Request.Url.AbsolutePath
+					try {
+						if ($p -like '/api/*') {
+							Send-JsonR $ctx @{ error = "SCCM WMI unavailable on $wmiConnSrv"; detail = $wmiConnErr } 503
+						} else {
+							$errHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Service Unavailable</title><style>body{font-family:'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:40px 48px;text-align:center;max-width:480px}h1{color:#f59e0b;margin-bottom:12px}p{color:#8892a4;font-size:14px;margin:4px 0}.detail{color:#64748b;font-size:12px;margin-top:12px;word-break:break-all}</style></head><body><div class='card'><h1>Service Unavailable</h1><p>Cannot contact SCCM WMI on <b>$wmiConnSrv</b>.</p><p>Verify that WMI and the SMS_Admin service are running on that server.</p><p class='detail'>$wmiConnErr</p></div></body></html>"
+							$errBytes = [System.Text.Encoding]::UTF8.GetBytes($errHtml)
+							$ctx.Response.StatusCode      = 503
+							$ctx.Response.ContentType     = 'text/html; charset=utf-8'
+							$ctx.Response.ContentLength64 = $errBytes.Length
+							$ctx.Response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+							$ctx.Response.OutputStream.Close()
+						}
+					} catch {}
+					return
 				}
 			}
 			if (-not $isAdmin) {
@@ -2988,6 +2997,25 @@ function Get-InstallerURLfromWinget {
 					$resp.OutputStream.Close()
 				} catch {}
 			}
+			} catch {
+				# Top-level handler guard: log any exception that escaped inner try-catch blocks
+				# and return a response so the browser does not hang indefinitely.
+				$logPath = try { $shared.LogPath } catch { $null }
+				if ($logPath) {
+					try {
+						$ts = Get-Date -Format 'HH:mm:ss'
+						Add-Content -Path $logPath -Value "$ts [WebHandler] $($_.Exception.GetType().Name): $($_.Exception.Message)" -ErrorAction SilentlyContinue
+						Add-Content -Path $logPath -Value "$ts [WebHandler] Stack: $($_.ScriptStackTrace)" -ErrorAction SilentlyContinue
+					} catch {}
+				}
+				try {
+					$errBytes = [System.Text.Encoding]::UTF8.GetBytes('Internal server error')
+					$ctx.Response.StatusCode      = 500
+					$ctx.Response.ContentLength64 = $errBytes.Length
+					$ctx.Response.OutputStream.Write($errBytes, 0, $errBytes.Length)
+					$ctx.Response.OutputStream.Close()
+				} catch {}
+			}
 		}
 
 		$fqdn = try { [System.Net.Dns]::GetHostEntry('localhost').HostName } catch { $env:COMPUTERNAME }
@@ -2997,12 +3025,12 @@ function Get-InstallerURLfromWinget {
 		Register-SPNForWebServer -Fqdn $fqdn -Port $port
 
 		$listener = New-Object System.Net.HttpListener
-		# Anonymous|Negotiate: HTTP.sys handles the full Negotiate/NTLM/Kerberos exchange
-		# for requests that carry an Authorization header.  Requests with no Authorization
-		# arrive as anonymous (IsAuthenticated=false) and are challenged by our handler with
-		# a styled HTML 401 + WWW-Authenticate: Negotiate.  This allows us to customise the
-		# 401 page (shown on cancel or auth failure) instead of getting HTTP.sys's raw 401.
-		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate -bor [System.Net.AuthenticationSchemes]::Anonymous
+		# Negotiate-only: HTTP.sys owns the complete NTLM/Kerberos handshake before queuing
+		# the context to our app.  Every context we receive is already authenticated.
+		# This is required so browsers (Chrome/Edge/IE) present their Windows credential
+		# dialog — a user-generated 401 from our app is treated as an HTML error page
+		# rather than an auth challenge, suppressing the dialog entirely.
+		$listener.AuthenticationSchemes = [System.Net.AuthenticationSchemes]::Negotiate
 		$listener.Prefixes.Add("http://+:$port/")
 
 		$pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, 8)
