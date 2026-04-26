@@ -2176,24 +2176,24 @@ function Get-InstallerURLfromWinget {
 
 		$s = @{}
 
-		Write-SpectreRule -Title 'CMPackager Setup Wizard' -Color 'Blue'
+		Write-SpectreRule -Title 'CMPackager Setup Wizard' -Color 'Blue' | Out-Host
 		Write-Host ''
 
-		Write-SpectreRule -Title 'Required Settings' -Color 'Grey'
+		Write-SpectreRule -Title 'Required Settings' -Color 'Grey' | Out-Host
 		$s.TempDir             = read-required 'Working Directory'              $Defaults.TempDir             { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
 		$s.ContentLocationRoot = read-required 'Content Root'                   $Defaults.ContentLocationRoot { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
 		$s.CMSite              = (read-required 'Site Code (e.g. PS1 or PS1:)' $Defaults.CMSite              { param($v) $v.ToUpper() -match '^[A-Z0-9]{3}:?$' } "Must be 3 uppercase alphanumeric characters, optionally followed by ':'.").ToUpper()
 		$s.SiteServer          = read-required 'Site Server FQDN'               $Defaults.SiteServer          { param($v) -not [string]::IsNullOrWhiteSpace($v) } 'Value is required.'
 
 		Write-Host ''
-		Write-SpectreRule -Title 'Optional Settings' -Color 'Grey'
+		Write-SpectreRule -Title 'Optional Settings' -Color 'Grey' | Out-Host
 		$s.IconRepo            = Read-SpectreText    -Message 'Icon Repository (leave blank to skip)' -DefaultAnswer $Defaults.IconRepo -AllowEmpty
 		$noVersionDefault      = if ($Defaults.NoVersionInSWCenter -eq 'True') { 'y' } else { 'n' }
 		$noVersion             = Read-SpectreConfirm -Message 'Hide version in Software Center display names?' -DefaultAnswer $noVersionDefault
 		$s.NoVersionInSWCenter = $noVersion.ToString()
 
 		Write-Host ''
-		Write-SpectreRule -Title 'Email Reporting' -Color 'Grey'
+		Write-SpectreRule -Title 'Email Reporting' -Color 'Grey' | Out-Host
 		$sendEmailDefault      = if ($Defaults.SendEmailPreference -eq 'True') { 'y' } else { 'n' }
 		$sendEmail             = Read-SpectreConfirm -Message 'Enable email reports?' -DefaultAnswer $sendEmailDefault
 		$s.SendEmailPreference = $sendEmail.ToString()
@@ -2212,7 +2212,7 @@ function Get-InstallerURLfromWinget {
 		}
 
 		Write-Host ''
-		Write-SpectreRule -Title 'SCCM Defaults (optional)' -Color 'Grey'
+		Write-SpectreRule -Title 'SCCM Defaults (optional)' -Color 'Grey' | Out-Host
 		$s.PreferredDistributionLoc  = Read-SpectreText -Message 'Preferred Distribution Point Group' -DefaultAnswer $Defaults.PreferredDistributionLoc  -AllowEmpty
 		$s.PreferredDeployCollection = Read-SpectreText -Message 'Preferred Deployment Collection'    -DefaultAnswer $Defaults.PreferredDeployCollection -AllowEmpty
 		$s.ContentFolderPattern      = $Defaults.ContentFolderPattern
@@ -2220,12 +2220,12 @@ function Get-InstallerURLfromWinget {
 		$s.GitHubToken               = $Defaults.GitHubToken
 
 		Write-Host ''
-		Write-SpectreRule -Title 'Web Server' -Color 'Grey'
+		Write-SpectreRule -Title 'Web Server' -Color 'Grey' | Out-Host
 		$s.WebServerPort         = read-required 'Web Server Port' $Defaults.WebServerPort { param($v) $v -match '^\d+$' -and [int]$v -ge 1 -and [int]$v -le 65535 } 'Must be a number between 1 and 65535.'
 		$s.WebServerRequiredRole = Read-SpectreText -Message 'Required SCCM Role (leave blank for any admin)' -DefaultAnswer $Defaults.WebServerRequiredRole -AllowEmpty
 
 		Write-Host ''
-		Write-SpectreRule -Title 'Review' -Color 'Grey'
+		Write-SpectreRule -Title 'Review' -Color 'Grey' | Out-Host
 		$tableData = @(
 			[pscustomobject]@{ Setting = 'Working Directory';         Value = $s.TempDir }
 			[pscustomobject]@{ Setting = 'Content Root';              Value = $s.ContentLocationRoot }
@@ -2243,7 +2243,7 @@ function Get-InstallerURLfromWinget {
 			[pscustomobject]@{ Setting = 'Web Server Port';           Value = $s.WebServerPort }
 			[pscustomobject]@{ Setting = 'Required SCCM Role';        Value = if ($s.WebServerRequiredRole) { $s.WebServerRequiredRole } else { '(any admin)' } }
 		)
-		Format-SpectreTable -Data $tableData -Color 'Grey' | Out-Null
+		Format-SpectreTable -Data $tableData -Color 'Grey' | Out-Host
 
 		$save = Read-SpectreConfirm -Message 'Save these settings?' -DefaultAnswer 'y'
 		if (-not $save) { return $null }
