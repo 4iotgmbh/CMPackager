@@ -1,56 +1,159 @@
 # CMPackager - 4IoT Fork
 
-This Application is a PowerShell Script that can be used to create applications in SCCM, it takes care of downloading, packaging, distributing and deploying the applications described in XML "recipe" files. The goal is to be able to package any frequently updating application with little to no work after creating the recipes.
-
+A PowerShell automation tool for SCCM/MEM ConfigMgr that downloads, packages, distributes, and deploys applications using XML "recipe" files. The goal is to package any frequently-updating application with little to no ongoing work after the initial recipe is created.
 
 ## Getting Started
 
-1. Download the Project
-2. Set up your SCCM Preferences in the CMPackager.prefs file (it is a standard XML file)
-3. Check out the Recipes in the "Disabled" Folder, Modify them to your needs, and copy them into the "Recipes" Folder
-4. Run CMPackager.ps1 - Recipes in the "Recipes" folder will be packaged if required. Note that some packages require admin to be packaged (App is installed then uninstalled to grab version info)
+1. Clone or download the project.
+2. Copy `CMPackager.prefs.template` to `CMPackager.prefs` and fill in your SCCM site details.
+3. Browse the ~75 example recipes in the `Disabled/` folder, adjust them to your environment, and move them into `Recipes/`.
+4. Run `CMPackager.ps1` - every recipe in `Recipes/` is processed if a newer version is available.
+
+```powershell
+# Standard run
+.\CMPackager.ps1
+
+# Run a single recipe (tab-completable from Recipes/ folder)
+.\CMPackager.ps1 -SingleRecipe 7-Zip.xml
+
+# First-time setup
+.\CMPackager.ps1 -Setup
+```
 
 ### Prerequisites
 
-MEM ConfigMgr Console - Tested on SCCM 2509 - works best if the console has been opened at least once.
+- SCCM 1906+ / MEM ConfigMgr (tested on SCCM 2509); console must have been opened at least once.
+- PowerShell 5.1+ for the main script.
+- PowerShell 7+ for helper scripts (`Get-WingetInfo.ps1`, `Test-RecipeInstallation.ps1`, `Test-RecipeBatch.ps1`).
 
-### Enabling the Packaging of Microsoft Surface Device Drivers and Firmware
+## What This Fork Adds
 
-1. Add the "MicrosoftSurfaceDrivers.xml" Recipe to the "Recipes" folder
-2. Navigate to ".\ExtraFiles\Scripts" and open "MicrosoftDrivers.csv", Remove any Drivers that you want packaged, All models currently supported by the script should already be there.
-3. Run CMPackager as usual, the first run will create the recipes and place them in the recipes folder, future runs will update the recipes and download the drivers.
+### WinGet-Backed Download URLs
 
-## Fork specifics
+Most recipes now use `Get-InstallerURLfromWinget` - a function built into `CMPackager.ps1` - inside their `<PrefetchScript>` block. Instead of scraping vendor websites, the function queries the official [WinGet package manifest repository](https://github.com/microsoft/winget-pkgs) on GitHub to resolve the current installer URL at runtime.
 
-1. Added function to query Winget repo for download URLs, to be used in recipes. This makes them significantly more robust than scraping websites.
-1. Rewrote most existing recipes to take advantage of this (were available).
-1. Normalized recipes to inlcude 3 deployment rings (test, pilot, general availability)
-1. Weeded out some obsole products
-1. Added helper functions to interact with the Winget repo and to scaffold new recipes
+```powershell
+# Example PrefetchScript in a recipe
+$DownloadURL = Get-InstallerURLfromWinget `
+    -apiUrl "https://api.github.com/repos/microsoft/winget-pkgs/contents/manifests/7/7zip/7zip" `
+    -InstallerType msi `
+    -Architecture x64 `
+    -Scope machine
+```
+
+Supported parameters: `-InstallerType msi|exe|zip`, `-Architecture x64|x86|arm64|arm`, `-Scope machine|user`.
+
+Set `<GitHubToken>` in your prefs file (or `$env:GITHUB_TOKEN`) to avoid GitHub API rate limits.
+
+### Recipe Research and Scaffolding Workflow
+
+Two helper scripts in `ExtraFiles/Scripts/` speed up new recipe creation:
+
+**Step 1 - Research the package:**
+
+```powershell
+cd ExtraFiles\Scripts
+.\Get-WingetInfo.ps1 -ApplicationName "7-Zip"
+```
+
+Opens an interactive grid to select the package, then pulls full metadata from the WinGet YAML manifests: installer URLs, product codes, publisher, silent switches, architectures, and more. Requires PS 7+ and the `Microsoft.WinGet.Client`, `Microsoft.PowerShell.ConsoleGuiTools`, `powershell-yaml`, and `cobalt` modules.
+
+**Step 2 - Scaffold the recipe file:**
+
+```powershell
+.\Get-WingetInfo.ps1 -ApplicationName "7-Zip" | .\New-ScaffoldRecipe.ps1
+```
+
+Pipes the metadata into `New-ScaffoldRecipe.ps1`, which picks the right template (`_MSIRecipeTemplate.xml` or `_EXERecipeTemplate.xml`), creates the recipe file in `Recipes/`, and pre-fills all fields it can derive from WinGet. You still need to add the icon, verify the detection method, and test before deploying.
+
+### Three-Ring Deployment Model
+
+All recipes normalised to include three deployment collections:
+
+| Ring | Purpose |
+|------|---------|
+| Test | IT / early testers, immediate deployment |
+| Pilot | Selected power users, short deadline |
+| GA | All users / general availability, extended deadline |
+
+### Automated Recipe Testing (Windows Sandbox)
+
+Two scripts validate that a recipe's install, detection, and uninstall commands actually work before you push anything to SCCM:
+
+```powershell
+# Test one recipe
+.\ExtraFiles\Scripts\Test-RecipeInstallation.ps1 -RecipePath .\Disabled\7-Zip.xml
+
+# Batch-test a whole folder and write a CSV report
+.\ExtraFiles\Scripts\Test-RecipeBatch.ps1 -RecipesPath .\Disabled
+```
+
+Each test spins up a clean Windows Sandbox instance, runs install, detection, uninstall, and detection again, then reports `PASS / FAIL / TIMEOUT / SKIPPED`. Results are saved as `results.json` and a timestamped CSV. Requires Windows 11 with Windows Sandbox enabled and PS 7+.
+
+### Web UI
+
+A browser-based dashboard for managing and monitoring CMPackager without touching the command line.
+
+```powershell
+# Start on the default port (8080)
+powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1
+
+# Use a different port
+powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1 -Port 9090
+
+# Enable verbose server-side logging
+powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1 -DebugMode
+```
+
+Then open `http://localhost:8080/` in a browser. The server reads `CMPackager.prefs` automatically; a warning banner appears in the UI if prefs are missing.
+
+The UI has four tabs:
+
+| Tab | What it does |
+|-----|-------------|
+| **Recipes** | Two-column view of enabled and disabled recipes. Enable/disable a recipe by clicking the arrow button (moves the file between `Recipes/` and `Disabled/`). Run a single recipe directly from the card. Set per-recipe Windows Task Scheduler schedules (daily / weekly / monthly) without leaving the browser - the server auto-assigns staggered start times to avoid conflicts. |
+| **Output** | Live terminal output streamed via Server-Sent Events while CMPackager is running. Optionally show a live tail of the log file alongside process output. Auto-scroll toggle included. |
+| **Test Results** | Loads the latest `RecipeTestResults_*.csv` produced by `Test-RecipeBatch.ps1` and renders it as a sortable, filterable table with colour-coded PASS / FAIL / TIMEOUT / SKIPPED badges. |
+| **SCCM Status** | Connects to your SCCM site and shows the current application version and deployment statistics (targeted, success, errors, in-progress) for every active recipe. |
+
+The header also has a global **Run All** button and a **Stop** button (visible while a run is active), and a live status pill that pulses green while CMPackager is running.
+
+The server is pure PowerShell with no external dependencies - it uses `System.Net.HttpListener` and a runspace pool for concurrent request handling.
+
+### Surface Driver Packaging
+
+1. Add `MicrosoftSurfaceDriversRecipe.xml` from `Disabled/` to `Recipes/`.
+2. Edit `ExtraFiles/Scripts/MicrosoftDrivers.csv` - remove any models you don't want packaged.
+3. Run CMPackager normally; the first run creates per-model recipes; subsequent runs download updated drivers.
+
+## Recipe Library
+
+| Location | Count | Purpose |
+|----------|-------|---------|
+| `Recipes/` | Active | Recipes processed on each run (gitignored except `Template.xml`) |
+| `Disabled/` | ~75 | Examples and templates to start from |
+
+Notable apps covered: 7-Zip, Adobe Reader, AzureDataStudio, Chrome, Firefox, Git, JetBrains Toolbox, Notepad++, PowerShell, Python, VLC, VS Code, Wireshark, Zoom, and many more.
 
 ## Contributing
 
-Feel free to create your own Recipes, Contribute to the main code, or provide feedback!
-
-* If you have questions feel free to post an issue with the "Question" label here on GitHub, or ask me on Twitter (publicly is preferred, but I don't mind DMs)
+Pull requests and issue reports are welcome. Recipes are the easiest contribution - see `Disabled/_MSIRecipeTemplate.xml` and `Disabled/_EXERecipeTemplate.xml` as starting points, or use the scaffold workflow above.
 
 ## Authors
 
-* **Andrew Jimenez** - *Main Author* - [asjimene](https://github.com/asjimene)
-* **Mirko Schnellbach** - *Fork Maintainer* - [4IoTMirko](https://github.com/4IoTMirko)
+- **Andrew Jimenez** - *Original Author* - [asjimene](https://github.com/asjimene)
+- **Mirko Schnellbach** - *Fork Maintainer* - [4IoTMirko](https://github.com/4IoTMirko)
 
-See also the list of [contributors](https://github.com/4IoTGmbH/CMPackager/graphs/contributors) who participated in this project.
+See also the [contributors list](https://github.com/4IoTGmbH/CMPackager/graphs/contributors).
 
 ## Acknowledgments
 
-Used and Modified code from the following, Thanks to all for their work: 
+Code adapted from:
 
-* Janik von Rots - [Copy-CMDeploymentTypeRule](https://janikvonrotz.ch/2017/10/20/configuration-manager-configure-requirement-rules-for-deployment-types-with-powershell/) 
+- Janik von Rots - [Copy-CMDeploymentTypeRule](https://janikvonrotz.ch/2017/10/20/configuration-manager-configure-requirement-rules-for-deployment-types-with-powershell/)
+- Jaap Brasser - [Get-ExtensionAttribute](http://www.jaapbrasser.com)
+- Nickolaj Andersen - [Get-MSIInfo](http://www.scconfigmgr.com/2014/08/22/how-to-get-msi-file-information-with-powershell/)
 
-* Jaap Brasser - [Get-ExtensionAttribute](http://www.jaapbrasser.com) 
+## License Notice
 
-* Nickolaj Andersen - [Get-MSIInfo](http://www.scconfigmgr.com/2014/08/22/how-to-get-msi-file-information-with-powershell/)
-
-## NOTE
-
-This Project does not provide Applications directly, Recipies provide the links to the Applications. Downloading and packaging software using this tool does not grant you a license for the software. Please ensure you are properly licensed for all software you package and distribute!
+This project does not distribute applications. Recipes provide links to vendor download URLs. Downloading and packaging software with this tool does not grant you a license for that software. Ensure you are properly licensed for everything you package and distribute.
