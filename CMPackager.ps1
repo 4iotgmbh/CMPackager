@@ -2,11 +2,11 @@
 	.NOTES
 	===========================================================================
 	 Created on:   		1/9/2018 11:34 AM
-	 Last Updated:  	02/26/2026
+	 Last Updated:  	05/09/2026
 	 Original Author:	Andrew Jimenez (asjimene) - https://github.com/asjimene/
-	 Fork Maintainer: Mirko Schnellbach (4IoTMirko) - 4IoT GmbH - https://github.com/4iotgmbh
+	 Fork Maintainer:   Mirko Schnellbach (4IoTMirko) - 4IoT GmbH - https://github.com/4iotgmbh
 	 Filename:     		CMPackager.ps1
-	 Fork URL:				https://github.com/4iotgmbh/CMPackager
+	 Fork URL:			https://github.com/4iotgmbh/CMPackager
 	===========================================================================
 	.DESCRIPTION
 		Packages Applications for ConfigMgr using XML Based Recipe Files
@@ -72,7 +72,7 @@ DynamicParam {
 
 process {
 
-	$Global:ScriptVersion = "26.02.26.0 - 4IoT Gmbh fork"
+	$Global:ScriptVersion = "1.0.0 - 4IoT Gmbh fork"
 
 	$Global:ScriptRoot = $PSScriptRoot
 
