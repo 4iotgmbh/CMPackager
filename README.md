@@ -5,8 +5,8 @@ A PowerShell automation tool for SCCM/MEM ConfigMgr that downloads, packages, di
 ## Getting Started
 
 1. Clone or download the project.
-2. Copy `CMPackager.prefs.template` to `CMPackager.prefs` and fill in your SCCM site details.
-3. Browse the ~75 example recipes in the `Disabled/` folder, adjust them to your environment, and move them into `Recipes/`.
+2. Run `.\CMPackager.ps1 -Setup` to configure your SCCM site details and save them to `CMPackager.prefs`.
+3. Browse the ~75 example recipes in the `Disabled/` folder, adjust them to your environment, and enable them — either by moving files into `Recipes/` manually, or via the web UI (`.\CMPackager.ps1 -WebServer`) which also lets you set per-recipe schedules.
 4. Run `CMPackager.ps1` - every recipe in `Recipes/` is processed if a newer version is available.
 
 ```powershell
@@ -16,15 +16,23 @@ A PowerShell automation tool for SCCM/MEM ConfigMgr that downloads, packages, di
 # Run a single recipe (tab-completable from Recipes/ folder)
 .\CMPackager.ps1 -SingleRecipe 7-Zip.xml
 
-# First-time setup
+# Interactive setup wizard — creates or updates CMPackager.prefs
 .\CMPackager.ps1 -Setup
+
+# Start the built-in web server (localhost only)
+.\CMPackager.ps1 -WebServer
+
+# Start the web server accessible over the network (experimental; requires domain auth)
+.\CMPackager.ps1 -WebServerPublic
 ```
+
+`-Setup` launches an interactive terminal wizard that walks through all prefs-file settings (SCCM site, temp/content paths, e-mail, GitHub token, web server port, etc.) and saves them to `CMPackager.prefs`. If the [PwshSpectreConsole](https://github.com/ShaunLawrie/PwshSpectreConsole) module is installed it uses a richer UI; otherwise it falls back to plain `Read-Host` prompts. The wizard offers to install PwshSpectreConsole automatically if it is missing.
 
 ### Prerequisites
 
 - SCCM 1906+ / MEM ConfigMgr (tested on SCCM 2509); console must have been opened at least once.
 - PowerShell 5.1+ for the main script.
-- PowerShell 7+ for helper scripts (`Get-WingetInfo.ps1`, `Test-RecipeInstallation.ps1`, `Test-RecipeBatch.ps1`).
+- PowerShell 7+ on the admin workstation for helper scripts (`Get-WingetInfo.ps1`, `Test-RecipeInstallation.ps1`, `Test-RecipeBatch.ps1`).
 
 ## What This Fork Adds
 
@@ -94,18 +102,26 @@ Each test spins up a clean Windows Sandbox instance, runs install, detection, un
 
 A browser-based dashboard for managing and monitoring CMPackager without touching the command line.
 
+The web server is built into `CMPackager.ps1` and is the recommended way to start it:
+
 ```powershell
-# Start on the default port (8080)
-powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1
+# Localhost-only (anonymous auth) — safe for a management workstation
+.\CMPackager.ps1 -WebServer
 
-# Use a different port
-powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1 -Port 9090
-
-# Enable verbose server-side logging
-powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1 -DebugMode
+# Network-accessible — uses Windows Integrated Authentication (Negotiate/Kerberos)
+# WARNING: still experimental; prefer -WebServer for day-to-day use
+.\CMPackager.ps1 -WebServerPublic
 ```
 
-Then open `http://localhost:8080/` in a browser. The server reads `CMPackager.prefs` automatically; a warning banner appears in the UI if prefs are missing.
+The port defaults to `8080` and can be changed via the `WebServerPort` setting in `CMPackager.prefs` (or through `-Setup`). Then open `http://localhost:8080/` in a browser. The server reads `CMPackager.prefs` automatically; a warning banner appears in the UI if prefs are missing.
+
+Alternatively, the standalone script in `Web\` can be used directly:
+
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1
+powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1 -Port 9090
+powershell.exe -ExecutionPolicy Bypass -File Web\Start-WebServer.ps1 -DebugMode
+```
 
 The UI has four tabs:
 
